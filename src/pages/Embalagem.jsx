@@ -4,7 +4,7 @@ import CameraCapture from '@/components/embalagem/CameraCapture'
 import ModalFinalizacao from '@/components/embalagem/ModalFinalizacao'
 import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { useUploadFile, useExtractData, useCreateEmbalagem } from '@/hooks/useEmbalagens'
-import base44 from '@/services/base44'
+import amplifyService from '@/services/amplify'
 
 export default function Embalagem() {
   const navigate = useNavigate()
@@ -66,7 +66,7 @@ export default function Embalagem() {
 
       // 3. Verificar duplicidade
       if (extractedNf) {
-        const embalagens = await base44.filterEmbalagens({ nf_number: extractedNf })
+        const embalagens = await amplifyService.filterEmbalagens({ nf_number: { eq: extractedNf } })
         const original = embalagens?.find(e => !e.is_duplicada)
 
         if (original) {
