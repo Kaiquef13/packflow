@@ -1,0 +1,335 @@
+📦 PACKFLOW - ESTRUTURA DO PROJETO
+=====================================
+
+Testesite/
+│
+├── 📄 Arquivos de Configuração
+│   ├── package.json              # Dependências e scripts
+│   ├── vite.config.js            # Configuração Vite
+│   ├── tailwind.config.js        # Configuração Tailwind CSS
+│   ├── postcss.config.js         # Configuração PostCSS
+│   ├── .env.example              # Exemplo de variáveis de ambiente
+│   └── .gitignore                # Arquivos ignorados pelo Git
+│
+├── 📚 Documentação
+│   ├── README.md                 # Visão geral e features
+│   ├── INICIO_RAPIDO.md          # Guia de início rápido
+│   ├── INSTRUCOES.md             # Instruções detalhadas
+│   ├── RESUMO_PROJETO.md         # Resumo técnico completo
+│   └── ESTRUTURA.txt             # Este arquivo
+│
+├── 🌐 HTML Base
+│   └── index.html                # HTML principal
+│
+└── 📁 src/
+    │
+    ├── 🎨 Estilos
+    │   └── index.css             # CSS global + Tailwind
+    │
+    ├── 🚀 Entry Point
+    │   ├── main.jsx              # Inicialização React + Providers
+    │   └── App.jsx               # Configuração de rotas
+    │
+    ├── 📄 Páginas (pages/)
+    │   ├── SelecaoOperador.jsx   # Tela inicial - selecionar operador
+    │   ├── Embalagem.jsx         # Processo de embalagem (3 etapas)
+    │   ├── Dashboard.jsx         # Dashboard principal com métricas
+    │   ├── Ranking.jsx           # Ranking de operadores
+    │   └── GestaoOperadores.jsx  # CRUD de operadores
+    │
+    ├── 🧩 Componentes (components/)
+    │   │
+    │   ├── 🎛️ UI Base (ui/)
+    │   │   ├── button.jsx        # Botão estilizado
+    │   │   ├── card.jsx          # Card container
+    │   │   ├── dialog.jsx        # Modal/Dialog
+    │   │   ├── input.jsx         # Input de texto
+    │   │   ├── textarea.jsx      # Textarea
+    │   │   ├── select.jsx        # Select dropdown
+    │   │   ├── badge.jsx         # Badge/Tag
+    │   │   └── table.jsx         # Tabela
+    │   │
+    │   ├── 📦 Embalagem (embalagem/)
+    │   │   ├── CameraCapture.jsx       # 📸 Componente de câmera
+    │   │   │                           #   - Multi-câmera
+    │   │   │                           #   - Zoom digital
+    │   │   │                           #   - Fallback resoluções
+    │   │   │                           #   - Preview e captura
+    │   │   │
+    │   │   ├── ModalFinalizacao.jsx    # ✅ Modal de conclusão
+    │   │   │                           #   - Resumo da embalagem
+    │   │   │                           #   - Opção de observação
+    │   │   │
+    │   │   └── ModalDuplicidade.jsx    # 🚨 Modal de NF duplicada
+    │   │                               #   - Sirene sonora
+    │   │                               #   - Dados da original
+    │   │
+    │   └── 📊 Dashboard (dashboard/)
+    │       ├── ResumoCards.jsx         # Cards de métricas
+    │       │                           #   - Total, Tempo, Operadores, Suspeitas
+    │       │
+    │       └── ModalAvaria.jsx         # ⚠️ Modal de registro de avaria
+    │                                   #   - Tipos de erro
+    │                                   #   - Impacto no ranking
+    │
+    ├── 🔗 Hooks Personalizados (hooks/)
+    │   ├── useOperadores.js      # React Query hooks para operadores
+    │   │                         #   - list, create, update, delete
+    │   │
+    │   └── useEmbalagens.js      # React Query hooks para embalagens
+    │                             #   - list, create, update
+    │                             #   - upload, extractData
+    │
+    ├── 🌐 Serviços (services/)
+    │   └── base44.js             # Integração com Base44 Platform
+    │                             #   - Operadores CRUD
+    │                             #   - Embalagens CRUD
+    │                             #   - Upload de fotos
+    │                             #   - OCR de DANFE
+    │
+    └── 🛠️ Utilitários (lib/)
+        └── utils.js              # Funções auxiliares
+                                  #   - cn (classnames)
+                                  #   - formatTime
+                                  #   - formatDateTime
+                                  #   - formatDate
+
+
+🎯 FLUXO DE NAVEGAÇÃO
+=====================
+
+    [Tela Inicial]
+    SelecaoOperador
+           │
+           ├─────────┐
+           │         │
+           ▼         ▼
+    [Embalagem]  [Dashboard] ────┐
+           │         │           │
+    [3 Etapas]      │           │
+    1. DANFE        │           │
+    2. Produtos     │           ▼
+    3. Caixa        ├───► [Ranking]
+           │         │
+           │         ▼
+           │    [Gestão Operadores]
+           │
+           └──► [Loop]
+
+
+📸 FLUXO DE EMBALAGEM
+=====================
+
+1. ETAPA 1 - DANFE
+   ├─ Captura foto
+   ├─ Upload (background)
+   ├─ OCR extrai NF + Cliente
+   ├─ Verifica duplicidade
+   │  └─ Se duplicada: SIRENE + Modal
+   └─ Inicia cronômetro
+
+2. ETAPA 2 - PRODUTOS
+   ├─ Captura foto
+   └─ Upload (background)
+
+3. ETAPA 3 - CAIXA
+   ├─ Captura foto
+   ├─ Upload (background)
+   ├─ Para cronômetro
+   ├─ Calcula tempo total
+   ├─ Define status (< 60s = suspeito)
+   ├─ Modal de finalização
+   └─ Salva no banco
+
+
+🎨 COMPONENTES DE CÂMERA
+========================
+
+CameraCapture Features:
+├─ 📹 Múltiplas câmeras
+│  └─ Botão para alternar
+├─ 🔍 Zoom digital
+│  ├─ Botões + / -
+│  └─ API nativa do dispositivo
+├─ 📐 Resoluções
+│  ├─ Tenta 4K (3840x2160)
+│  ├─ Fallback Full HD (1920x1080)
+│  └─ Fallback HD (1280x720)
+├─ 💾 Preferências
+│  └─ Salva câmera no localStorage
+├─ 📊 Progresso visual
+│  └─ Barra 1/3, 2/3, 3/3
+└─ ✨ Animações
+   ├─ Preview congelado
+   ├─ Feedback de captura
+   └─ Loading overlay
+
+
+🏆 SISTEMA DE RANKING
+=====================
+
+Métricas Calculadas:
+├─ Por Volume
+│  └─ Total de embalagens (desc)
+├─ Por Velocidade
+│  └─ Tempo médio (asc)
+└─ Por Qualidade
+   └─ Taxa = (total - suspeitas - avarias) / total × 100
+
+Filtros:
+├─ Período
+│  ├─ Hoje
+│  ├─ Semana
+│  └─ Total
+└─ Turno
+   ├─ Todos
+   ├─ Manhã (6h-12h)
+   ├─ Tarde (12h-18h)
+   └─ Noite (18h-6h)
+
+
+📊 ENTIDADES BASE44
+===================
+
+Operador {
+  id: string
+  nome: string
+  apelido: string
+  ativo: boolean
+  foto_url: string
+}
+
+Embalagem {
+  id: string
+  nf_number: string
+  cliente_nome: string
+  start_time: datetime
+  end_time: datetime
+  tempo_total_segundos: number
+  foto_danfe_url: string
+  foto_conteudo_url: string
+  foto_caixa_url: string
+  observacao: string
+  operador_id: string
+  operador_nome: string
+  pendente_extracao: boolean
+  status: "concluido" | "suspeito" | "pendente"
+  tem_avaria: boolean
+  tipo_avaria: string
+  observacao_avaria: string
+  avaria_registrada_por: string
+  avaria_registrada_em: datetime
+  is_duplicada: boolean
+  nf_original_id: string
+  data_nf_original: datetime
+}
+
+
+🎨 DESIGN SYSTEM
+================
+
+Cores:
+├─ Primária: Indigo (600/700)
+├─ Sucesso: Emerald (500/600)
+├─ Alerta: Orange (500/600)
+├─ Duplicidade: Orange (400/600)
+├─ Avaria: Red (500/700)
+└─ Backgrounds: Gray (50/100)
+
+Animações (Framer Motion):
+├─ Fade in (modais)
+├─ Pulse (alertas)
+├─ Bounce (erros)
+├─ Spin (loaders)
+├─ Slide in (expansão)
+└─ Scale (pódio)
+
+Responsividade:
+├─ Mobile-first
+├─ Breakpoints: sm, md, lg
+├─ Câmera fullscreen
+├─ Tabelas overflow-x-auto
+└─ Grids adaptáveis
+
+
+🔧 TECNOLOGIAS
+==============
+
+Frontend:
+├─ React 18
+├─ React Router
+├─ TanStack Query
+├─ Tailwind CSS
+├─ Framer Motion
+├─ Lucide Icons
+└─ date-fns
+
+Backend:
+└─ Base44 Platform
+   ├─ CRUD Entities
+   ├─ File Upload
+   ├─ LLM OCR
+   └─ Authentication
+
+Build:
+├─ Vite
+├─ PostCSS
+└─ Autoprefixer
+
+
+📝 COMANDOS
+===========
+
+Desenvolvimento:
+  npm install      # Instalar dependências
+  npm run dev      # Servidor de desenvolvimento
+
+Produção:
+  npm run build    # Build para produção
+  npm run preview  # Preview da build
+
+Qualidade:
+  npm run lint     # Verificar código
+
+
+✨ FUNCIONALIDADES ÚNICAS
+=========================
+
+✓ Suporte a múltiplas câmeras
+✓ Zoom digital avançado
+✓ Sirene sonora em duplicidades
+✓ OCR automático de DANFE
+✓ Detecção de duplicidade
+✓ Ranking triplo (volume/velocidade/qualidade)
+✓ Registro de avarias
+✓ Auto-atualização dashboard
+✓ Exportação CSV
+✓ Uploads em background
+✓ Animações suaves
+✓ Design moderno
+✓ Mobile-friendly
+
+
+🎯 STATUS DO PROJETO
+====================
+
+✅ 100% FUNCIONAL E COMPLETO
+
+Todos os requisitos implementados:
+✓ 5 páginas completas
+✓ 12 componentes reutilizáveis
+✓ Integração Base44
+✓ React Query hooks
+✓ Detecção de duplicidade
+✓ Sirene sonora
+✓ Ranking completo
+✓ Gestão de avarias
+✓ Exportação CSV
+✓ Animações
+✓ Responsividade
+✓ Documentação completa
+
+
+=====================================
+Sistema pronto para produção! 🚀
+=====================================
