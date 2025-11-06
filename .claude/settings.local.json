@@ -9,7 +9,18 @@
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
       "Bash(git push:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(amplify init:*)",
+      "Bash(amplify add:*)",
+      "Bash(amplify status:*)",
+      "Bash(amplify push:*)",
+      "Bash(amplify pull:*)",
+      "Bash(amplify env remove:*)",
+      "Bash(amplify delete:*)",
+      "Bash(printf:*)",
+      "Bash(ipconfig:*)",
+      "Bash(findstr:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

@@ -46,10 +46,11 @@ export default function Embalagem() {
       // 1. Upload da foto
       const uploadResult = await uploadFile.mutateAsync(file)
       const fileUrl = uploadResult.file_url
+      const fileKey = uploadResult.key
       setFotoDanfeUrl(fileUrl)
 
       // 2. Extrair dados com OCR
-      const ocrResult = await extractData.mutateAsync({ fileUrl })
+      const ocrResult = await extractData.mutateAsync({ key: fileKey })
       const extractedNf = ocrResult.nf_number || ''
       const extractedCliente = ocrResult.cliente_nome || ''
 

@@ -1,0 +1,68 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-testesite-dev-42f54-authRole",
+      "UnauthRoleArn": "arn:aws:iam::222257015950:role/amplify-testesite-dev-42f54-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::222257015950:role/amplify-testesite-dev-42f54-authRole",
+      "Region": "sa-east-1",
+      "DeploymentBucketName": "amplify-testesite-dev-42f54-deployment",
+      "UnauthRoleName": "amplify-testesite-dev-42f54-unauthRole",
+      "StackName": "amplify-testesite-dev-42f54",
+      "StackId": "arn:aws:cloudformation:sa-east-1:222257015950:stack/amplify-testesite-dev-42f54/2db034f0-bacd-11f0-a78b-06490aab6d55",
+      "AmplifyAppId": "d2wv4dvv41856b",
+      "APIGatewayAuthURL": "https://s3.amazonaws.com/amplify-testesite-dev-42f54-deployment/amplify-cfn-templates/api/APIGatewayAuthStack.json"
+    },
+    "categories": {
+      "auth": {
+        "testesiteaf22294d": {}
+      },
+      "api": {
+        "testesite": {},
+        "textractapi": {}
+      },
+      "storage": {
+        "packflowstorage": {}
+      },
+      "function": {
+        "danfeTextract": {
+          "deploymentBucketName": "amplify-testesite-dev-42f54-deployment",
+          "s3Key": "amplify-builds/danfeTextract-61546f617a4d4c553934-build.zip"
+        },
+        "packflowstorage": {}
+      }
+    }
+  },
+  "prod": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-testesite-prod-87346-authRole",
+      "UnauthRoleArn": "arn:aws:iam::222257015950:role/amplify-testesite-prod-87346-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::222257015950:role/amplify-testesite-prod-87346-authRole",
+      "Region": "sa-east-1",
+      "DeploymentBucketName": "amplify-testesite-prod-87346-deployment",
+      "UnauthRoleName": "amplify-testesite-prod-87346-unauthRole",
+      "StackName": "amplify-testesite-prod-87346",
+      "StackId": "arn:aws:cloudformation:sa-east-1:222257015950:stack/amplify-testesite-prod-87346/d9a1e050-bb14-11f0-8d33-02a8461f5925",
+      "AmplifyAppId": "d2wv4dvv41856b",
+      "APIGatewayAuthURL": "https://s3.amazonaws.com/amplify-testesite-prod-87346-deployment/amplify-cfn-templates/api/APIGatewayAuthStack.json"
+    },
+    "categories": {
+      "auth": {
+        "testesiteaf22294d": {}
+      },
+      "function": {
+        "danfeTextract": {
+          "deploymentBucketName": "amplify-testesite-prod-87346-deployment",
+          "s3Key": "amplify-builds/danfeTextract-61546f617a4d4c553934-build.zip"
+        },
+        "packflowstorage": {}
+      },
+      "api": {
+        "testesite": {},
+        "textractapi": {}
+      },
+      "storage": {
+        "packflowstorage": {}
+      }
+    }
+  }
+}

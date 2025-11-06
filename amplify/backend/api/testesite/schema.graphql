@@ -1,0 +1,86 @@
+# ============================================
+# PackFlow - Sistema de Gestão de Embalagens
+# Schema GraphQL - AWS Amplify
+# ============================================
+
+# Configuração de autenticação pública (API Key)
+input AMPLIFY { globalAuthRule: AuthRule = { allow: public } }
+
+# ============================================
+# MODELO: Operador
+# ============================================
+type Operador @model {
+  id: ID!
+  nome: String!
+  apelido: String
+  ativo: Boolean!
+  foto_url: String
+
+  # Relacionamento: Um operador pode ter muitas embalagens
+  embalagens: [Embalagem] @hasMany(indexName: "byOperador", fields: ["id"])
+
+  # Timestamps automáticos
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# ============================================
+# MODELO: Embalagem
+# ============================================
+type Embalagem @model {
+  id: ID!
+
+  # Dados da Nota Fiscal
+  nf_number: String!
+  cliente_nome: String
+
+  # Controle de Tempo
+  start_time: AWSDateTime!
+  end_time: AWSDateTime
+  tempo_total_segundos: Int
+
+  # Fotos (URLs do S3)
+  foto_danfe_url: String
+  foto_conteudo_url: String
+  foto_caixa_url: String
+
+  # Observações
+  observacao: String
+
+  # Relacionamento com Operador
+  operador_id: ID! @index(name: "byOperador", sortKeyFields: ["createdAt"])
+  operador_nome: String # Desnormalizado para performance
+  operador: Operador @belongsTo(fields: ["operador_id"])
+
+  # Status de Extração OCR
+  pendente_extracao: Boolean
+
+  # Status do Pedido
+  status: StatusEmbalagem
+
+  # Controle de Avarias
+  tem_avaria: Boolean
+  tipo_avaria: String
+  observacao_avaria: String
+  avaria_registrada_por: String
+  avaria_registrada_em: AWSDateTime
+
+  # Controle de Duplicidade
+  is_duplicada: Boolean
+  nf_original_id: ID
+  data_nf_original: AWSDateTime
+
+  # Timestamps automáticos
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# ============================================
+# ENUMS
+# ============================================
+enum StatusEmbalagem {
+  EM_ANDAMENTO
+  CONCLUIDA
+  SUSPEITA
+  CANCELADA
+}

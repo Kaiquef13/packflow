@@ -1,0 +1,10 @@
+{
+  "lambdaLayers": [],
+  "permissions": {
+    "storage": {
+      "packflowstorage": [
+        "read"
+      ]
+    }
+  }
+}

@@ -38,6 +38,6 @@ export function useUploadFile() {
 
 export function useExtractData() {
   return useMutation({
-    mutationFn: ({ fileUrl }) => amplifyService.extractDataFromFile(fileUrl),
+    mutationFn: ({ key }) => amplifyService.extractDataFromFile({ key }),
   })
 }

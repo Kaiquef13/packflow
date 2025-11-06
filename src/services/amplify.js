@@ -1,5 +1,5 @@
-import { Amplify } from 'aws-amplify';
-import { generateClient } from 'aws-amplify/api';
+﻿import { Amplify } from 'aws-amplify';
+import { generateClient, post } from 'aws-amplify/api';
 import { uploadData, getUrl } from 'aws-amplify/storage';
 import awsconfig from '../aws-exports';
 
@@ -321,7 +321,7 @@ export async function uploadFile(file) {
       }
     }).result;
 
-    // Obter URL pública
+    // Obter URL pÃºblica
     const urlResult = await getUrl({
       key: fileName,
       options: { level: 'public' }
@@ -337,59 +337,47 @@ export async function uploadFile(file) {
   }
 }
 
-// ============ OCR (Tesseract.js) ============
-
-export async function extractDataFromFile(fileUrl) {
-  try {
-    const { Tesseract } = await import('tesseract.js');
-
-    // Fazer download da imagem como blob
-    const response = await fetch(fileUrl);
-    const blob = await response.blob();
-
-    // Executar OCR
-    const worker = await Tesseract.createWorker('por'); // Português do Brasil
-    const result = await worker.recognize(blob);
-    await worker.terminate();
-
-    const fullText = result.data.text.toUpperCase();
-
-    // Padrões de regex para extrair NF e Cliente
-    // NF: pode estar em formatos diferentes (NF, NF-E, NFe, etc)
-    const nfPattern = /(?:NF[^A-Z0-9]*|NFCE[^A-Z0-9]*|NFE[^A-Z0-9]*)(\d+(?:[.,]\d{1,2})?)/;
-    const clientePattern = /(?:CLIENTE|DESTINATÁRIO|DESTINATARIO)[\s:]*([A-Z]{2,}(?:\s+[A-Z]{2,})*)/;
-
-    const nfMatch = fullText.match(nfPattern);
-    const clienteMatch = fullText.match(clientePattern);
-
-    const nfNumber = nfMatch ? nfMatch[1].replace(/[.,]/g, '') : '';
-    const clienteNome = clienteMatch ? clienteMatch[1].trim() : '';
-
-    console.log('OCR Result:', {
-      nf_number: nfNumber,
-      cliente_nome: clienteNome,
-      fullText: fullText.substring(0, 200)
-    });
-
-    return {
-      nf_number: nfNumber,
-      cliente_nome: clienteNome,
-      extracted: !!(nfNumber || clienteNome),
-      fullText: fullText
-    };
-  } catch (error) {
-    console.error('Erro ao extrair dados com OCR:', error);
-
-    // Fallback: tentar extrair NF da URL ou retornar vazio
-    return {
-      nf_number: '',
-      cliente_nome: '',
-      extracted: false,
-      error: error.message
-    };
-  }
-}
-
+// ============ OCR (AWS Textract) ============
+
+const textractApiConfig = awsconfig.aws_cloud_logic_custom?.find((api) => api.name === 'textractapi');
+const textractApiName = textractApiConfig?.name;
+
+export async function extractDataFromFile({ key }) {
+  if (!key) {
+    throw new Error('Arquivo sem referencia (key) para OCR.');
+  }
+
+  if (!textractApiName) {
+    throw new Error('Endpoint Textract nao configurado.');
+  }
+
+  const bucket = awsconfig.aws_user_files_s3_bucket;
+  const s3Key = key.startsWith('public/') ? key : `public/${key}`;
+
+  try {
+    const restOperation = post({
+      apiName: textractApiName,
+      path: '/ocr',
+      options: {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: {
+          key: s3Key,
+          bucket
+        }
+      }
+    });
+
+    const { body } = await restOperation.response;
+    const data = await body.json();
+    return data;
+  } catch (error) {
+    console.error('Erro ao extrair dados com Textract:', error);
+    throw error;
+  }
+}
+
 const amplifyService = {
   // Operadores
   listOperadores,
@@ -412,3 +400,5 @@ const amplifyService = {
 };
 
 export default amplifyService;
+
+

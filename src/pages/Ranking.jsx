@@ -19,11 +19,11 @@ export default function Ranking() {
     // Filtro de período
     if (periodo === 'hoje') {
       const hoje = new Date().toDateString()
-      filtradas = filtradas.filter(e => new Date(e.created_date).toDateString() === hoje)
+      filtradas = filtradas.filter(e => new Date(e.createdAt).toDateString() === hoje)
     } else if (periodo === 'semana') {
       const semanaAtras = new Date()
       semanaAtras.setDate(semanaAtras.getDate() - 7)
-      filtradas = filtradas.filter(e => new Date(e.created_date) >= semanaAtras)
+      filtradas = filtradas.filter(e => new Date(e.createdAt) >= semanaAtras)
     }
 
     // Filtro de turno

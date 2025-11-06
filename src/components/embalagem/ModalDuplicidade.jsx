@@ -155,7 +155,7 @@ export default function ModalDuplicidade({
                 <Calendar className="w-5 h-5 text-gray-600 mt-0.5" />
                 <div>
                   <p className="text-sm text-gray-600">Data/Hora</p>
-                  <p className="font-medium">{formatDateTime(embalagemOriginal?.created_date || embalagemOriginal?.start_time)}</p>
+                  <p className="font-medium">{formatDateTime(embalagemOriginal?.createdAt || embalagemOriginal?.start_time)}</p>
                 </div>
               </div>
             </div>

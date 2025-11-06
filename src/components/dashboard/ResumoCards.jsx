@@ -8,7 +8,7 @@ export default function ResumoCards({ embalagens = [] }) {
     ? Math.floor(embalagens.reduce((sum, e) => sum + (e.tempo_total_segundos || 0), 0) / embalagens.length)
     : 0
   const operadoresUnicos = new Set(embalagens.map(e => e.operador_id)).size
-  const embalagensSuspeitas = embalagens.filter(e => e.status === 'suspeito' || e.tem_avaria).length
+  const embalagensSuspeitas = embalagens.filter(e => e.status === 'SUSPEITA' || e.tem_avaria).length
 
   const cards = [
     {
