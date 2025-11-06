@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useEmbalagens } from '@/hooks/useEmbalagens'
 import ResumoCards from '@/components/dashboard/ResumoCards'
+import ModalDetalhes from '@/components/dashboard/ModalDetalhes'
 import { formatDateTime, formatTime } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -15,6 +16,8 @@ export default function Dashboard() {
   const [filtro, setFiltro] = useState('todas')
   const [busca, setBusca] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [embalagemSelecionada, setEmbalagemSelecionada] = useState(null)
+  const [showDetalhes, setShowDetalhes] = useState(false)
 
   useEffect(() => {
     let interval
@@ -27,7 +30,7 @@ export default function Dashboard() {
   const exportarCSV = () => {
     const headers = ['Data/Hora', 'NF', 'Cliente', 'Operador', 'Tempo (seg)', 'Status', 'Observação']
     const rows = embalagensFiltradas.map(e => [
-      formatDateTime(e.created_date),
+      formatDateTime(e.createdAt),
       e.nf_number || '-',
       e.cliente_nome || '-',
       e.operador_nome || '-',
@@ -49,12 +52,12 @@ export default function Dashboard() {
     // Filtro por período
     if (filtro === 'hoje') {
       const hoje = new Date().toDateString()
-      const dataEmbalagem = new Date(e.created_date).toDateString()
+      const dataEmbalagem = new Date(e.createdAt).toDateString()
       if (hoje !== dataEmbalagem) return false
     } else if (filtro === 'semana') {
       const semanaAtras = new Date()
       semanaAtras.setDate(semanaAtras.getDate() - 7)
-      if (new Date(e.created_date) < semanaAtras) return false
+      if (new Date(e.createdAt) < semanaAtras) return false
     }
 
     // Busca
@@ -161,6 +164,7 @@ export default function Dashboard() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Operador</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Tempo</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -184,7 +188,7 @@ export default function Dashboard() {
                         embalagem.tem_avaria ? 'bg-red-50' : embalagem.is_duplicada ? 'bg-orange-50' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 text-sm">{formatDateTime(embalagem.created_date)}</td>
+                      <td className="px-4 py-3 text-sm">{formatDateTime(embalagem.createdAt)}</td>
                       <td className="px-4 py-3 text-sm font-medium">{embalagem.nf_number || '-'}</td>
                       <td className="px-4 py-3 text-sm">{embalagem.cliente_nome || '-'}</td>
                       <td className="px-4 py-3 text-sm">{embalagem.operador_nome || '-'}</td>
@@ -193,8 +197,8 @@ export default function Dashboard() {
                         <div className="flex gap-1">
                           <Badge
                             variant={
-                              embalagem.status === 'concluido' ? 'success' :
-                              embalagem.status === 'suspeito' ? 'warning' : 'secondary'
+                              embalagem.status === 'CONCLUIDA' ? 'success' :
+                              embalagem.status === 'SUSPEITA' ? 'warning' : 'secondary'
                             }
                           >
                             {embalagem.status}
@@ -202,6 +206,18 @@ export default function Dashboard() {
                           {embalagem.is_duplicada && <Badge variant="warning">Duplicada</Badge>}
                           {embalagem.tem_avaria && <Badge variant="destructive">Avaria</Badge>}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEmbalagemSelecionada(embalagem)
+                            setShowDetalhes(true)
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -211,6 +227,23 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Detalhes */}
+      {embalagemSelecionada && (
+        <ModalDetalhes
+          embalagem={embalagemSelecionada}
+          isOpen={showDetalhes}
+          onClose={() => {
+            setShowDetalhes(false)
+            setEmbalagemSelecionada(null)
+          }}
+          onUpdateSuccess={() => {
+            refetch()
+            setShowDetalhes(false)
+            setEmbalagemSelecionada(null)
+          }}
+        />
+      )}
     </div>
   )
 }
