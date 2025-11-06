@@ -14,8 +14,8 @@ const client = generateClient();
 export async function listOperadores() {
   try {
     const query = /* GraphQL */ `
-      query ListOperadores {
-        listOperadores {
+      query ListOperadors {
+        listOperadors {
           items {
             id
             nome
@@ -30,7 +30,7 @@ export async function listOperadores() {
     `;
 
     const result = await client.graphql({ query });
-    return result.data.listOperadores.items;
+    return result.data.listOperadors.items;
   } catch (error) {
     console.error('Erro ao listar operadores:', error);
     throw error;
@@ -40,8 +40,8 @@ export async function listOperadores() {
 export async function filterOperadores(filter) {
   try {
     const query = /* GraphQL */ `
-      query ListOperadores($filter: ModelOperadorFilterInput) {
-        listOperadores(filter: $filter) {
+      query ListOperadors($filter: ModelOperadorFilterInput) {
+        listOperadors(filter: $filter) {
           items {
             id
             nome
@@ -59,7 +59,7 @@ export async function filterOperadores(filter) {
       query,
       variables: { filter }
     });
-    return result.data.listOperadores.items;
+    return result.data.listOperadors.items;
   } catch (error) {
     console.error('Erro ao filtrar operadores:', error);
     throw error;
@@ -146,8 +146,8 @@ export async function deleteOperador(id) {
 export async function listEmbalagens(sortDirection = 'DESC') {
   try {
     const query = /* GraphQL */ `
-      query ListEmbalagens($sortDirection: ModelSortDirection) {
-        listEmbalagens(sortDirection: $sortDirection) {
+      query ListEmbalagems {
+        listEmbalagems {
           items {
             id
             nf_number
@@ -178,11 +178,15 @@ export async function listEmbalagens(sortDirection = 'DESC') {
       }
     `;
 
-    const result = await client.graphql({
-      query,
-      variables: { sortDirection }
+    const result = await client.graphql({ query });
+    const items = result.data.listEmbalagems.items;
+
+    // Ordenar por createdAt (DESC ou ASC)
+    return items.sort((a, b) => {
+      const dateA = new Date(a.createdAt);
+      const dateB = new Date(b.createdAt);
+      return sortDirection === 'DESC' ? dateB - dateA : dateA - dateB;
     });
-    return result.data.listEmbalagens.items;
   } catch (error) {
     console.error('Erro ao listar embalagens:', error);
     throw error;
@@ -192,8 +196,8 @@ export async function listEmbalagens(sortDirection = 'DESC') {
 export async function filterEmbalagens(filter) {
   try {
     const query = /* GraphQL */ `
-      query ListEmbalagens($filter: ModelEmbalagemFilterInput) {
-        listEmbalagens(filter: $filter) {
+      query ListEmbalagems($filter: ModelEmbalagemFilterInput) {
+        listEmbalagems(filter: $filter) {
           items {
             id
             nf_number
@@ -228,7 +232,7 @@ export async function filterEmbalagens(filter) {
       query,
       variables: { filter }
     });
-    return result.data.listEmbalagens.items;
+    return result.data.listEmbalagems.items;
   } catch (error) {
     console.error('Erro ao filtrar embalagens:', error);
     throw error;
@@ -333,30 +337,56 @@ export async function uploadFile(file) {
   }
 }
 
-// ============ OCR (Amazon Textract) ============
-// Nota: O OCR via Textract requer configuração de Lambda function
-// Por enquanto, vamos simular a extração ou você pode adicionar uma Lambda
+// ============ OCR (Tesseract.js) ============
 
 export async function extractDataFromFile(fileUrl) {
   try {
-    // OPÇÃO 1: Usar Lambda function com Textract (recomendado)
-    // const response = await fetch('YOUR_API_GATEWAY_URL/extract', {
-    //   method: 'POST',
-    //   body: JSON.stringify({ imageUrl: fileUrl })
-    // });
-    // return await response.json();
+    const { Tesseract } = await import('tesseract.js');
 
-    // OPÇÃO 2: Por enquanto, retornar dados mockados ou extrair do nome do arquivo
-    console.log('OCR pendente - configurar Lambda + Textract');
+    // Fazer download da imagem como blob
+    const response = await fetch(fileUrl);
+    const blob = await response.blob();
+
+    // Executar OCR
+    const worker = await Tesseract.createWorker('por'); // Português do Brasil
+    const result = await worker.recognize(blob);
+    await worker.terminate();
+
+    const fullText = result.data.text.toUpperCase();
+
+    // Padrões de regex para extrair NF e Cliente
+    // NF: pode estar em formatos diferentes (NF, NF-E, NFe, etc)
+    const nfPattern = /(?:NF[^A-Z0-9]*|NFCE[^A-Z0-9]*|NFE[^A-Z0-9]*)(\d+(?:[.,]\d{1,2})?)/;
+    const clientePattern = /(?:CLIENTE|DESTINATÁRIO|DESTINATARIO)[\s:]*([A-Z]{2,}(?:\s+[A-Z]{2,})*)/;
+
+    const nfMatch = fullText.match(nfPattern);
+    const clienteMatch = fullText.match(clientePattern);
+
+    const nfNumber = nfMatch ? nfMatch[1].replace(/[.,]/g, '') : '';
+    const clienteNome = clienteMatch ? clienteMatch[1].trim() : '';
+
+    console.log('OCR Result:', {
+      nf_number: nfNumber,
+      cliente_nome: clienteNome,
+      fullText: fullText.substring(0, 200)
+    });
 
     return {
-      nf_number: 'NF-' + Math.floor(Math.random() * 10000),
-      cliente_nome: 'Cliente Exemplo',
-      extracted: false
+      nf_number: nfNumber,
+      cliente_nome: clienteNome,
+      extracted: !!(nfNumber || clienteNome),
+      fullText: fullText
     };
   } catch (error) {
-    console.error('Erro ao extrair dados:', error);
-    throw error;
+    console.error('Erro ao extrair dados com OCR:', error);
+
+    // Fallback: tentar extrair NF da URL ou retornar vazio
+    return {
+      nf_number: '',
+      cliente_nome: '',
+      extracted: false,
+      error: error.message
+    };
   }
 }
 

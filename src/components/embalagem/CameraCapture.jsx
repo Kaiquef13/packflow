@@ -367,8 +367,12 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isP
           >
             <div className="text-white text-center">
               <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
-              <p className="text-lg font-medium">Processando foto...</p>
-              <p className="text-sm opacity-70 mt-1">Aguarde um momento</p>
+              <p className="text-lg font-medium">
+                {etapa === 1 ? 'Extraindo dados da DANFE...' : 'Processando foto...'}
+              </p>
+              <p className="text-sm opacity-70 mt-1">
+                {etapa === 1 ? 'Aguarde enquanto o OCR processa a nota fiscal' : 'Aguarde um momento'}
+              </p>
             </div>
           </motion.div>
         )}

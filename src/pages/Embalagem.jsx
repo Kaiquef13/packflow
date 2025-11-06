@@ -49,15 +49,7 @@ export default function Embalagem() {
       setFotoDanfeUrl(fileUrl)
 
       // 2. Extrair dados com OCR
-      const jsonSchema = {
-        type: 'object',
-        properties: {
-          nf_number: { type: 'string', description: 'Número da nota fiscal' },
-          cliente_nome: { type: 'string', description: 'Nome do cliente' }
-        }
-      }
-
-      const ocrResult = await extractData.mutateAsync({ fileUrl, jsonSchema })
+      const ocrResult = await extractData.mutateAsync({ fileUrl })
       const extractedNf = ocrResult.nf_number || ''
       const extractedCliente = ocrResult.cliente_nome || ''
 
@@ -78,8 +70,7 @@ export default function Embalagem() {
         }
       }
 
-      // 4. Iniciar cronômetro
-      setStartTime(new Date())
+      // 4. Ir para etapa 2 (cronômetro começará na próxima etapa)
       setIsProcessing(false)
       setEtapa(2)
     } catch (error) {
@@ -101,6 +92,10 @@ export default function Embalagem() {
     try {
       const uploadResult = await uploadFile.mutateAsync(file)
       setFotoConteudoUrl(uploadResult.file_url)
+
+      // Iniciar cronômetro na etapa 2 (primeira foto - produtos)
+      setStartTime(new Date())
+
       setIsProcessing(false)
       setEtapa(3)
     } catch (error) {
@@ -131,7 +126,14 @@ export default function Embalagem() {
     try {
       const endTime = new Date()
       const tempoTotalSegundos = Math.floor((endTime - startTime) / 1000)
-      const status = tempoTotalSegundos < 60 ? 'suspeito' : 'concluido'
+
+      // Definir status baseado no tempo
+      const status = tempoTotalSegundos < 60 ? 'SUSPEITA' : 'CONCLUIDA'
+
+      // Adicionar alerta na observação se tempo for suspeito (< 60 segundos)
+      const observacaoFinal = tempoTotalSegundos < 60
+        ? `${observacao ? observacao + '\n' : ''}[ALERTA: Tempo suspeito - ${tempoTotalSegundos}s]`.trim()
+        : observacao || ''
 
       const data = {
         nf_number: nfNumber,
@@ -142,7 +144,7 @@ export default function Embalagem() {
         foto_danfe_url: fotoDanfeUrl,
         foto_conteudo_url: fotoConteudoUrl,
         foto_caixa_url: fotoCaixaUrl,
-        observacao: observacao || '',
+        observacao: observacaoFinal,
         operador_id: operador.id,
         operador_nome: operador.apelido || operador.nome,
         pendente_extracao: !nfNumber,
@@ -150,7 +152,7 @@ export default function Embalagem() {
         tem_avaria: false,
         is_duplicada: isDuplicada,
         nf_original_id: embalagemOriginal?.id || null,
-        data_nf_original: embalagemOriginal?.created_date || null,
+        data_nf_original: embalagemOriginal?.createdAt || null,
       }
 
       await createEmbalagem.mutateAsync(data)
