@@ -84,6 +84,14 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/')}
+              className="flex-1 sm:flex-none"
+            >
+              Tela Inicial
+            </Button>
+            <Button
               variant={autoRefresh ? 'default' : 'outline'}
               onClick={() => setAutoRefresh(!autoRefresh)}
               size="sm"

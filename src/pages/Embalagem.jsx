@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import CameraCapture from '@/components/embalagem/CameraCapture'
 import ModalFinalizacao from '@/components/embalagem/ModalFinalizacao'
 import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
+import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import amplifyService from '@/services/amplify'
 
@@ -342,6 +343,15 @@ export default function Embalagem() {
     resetarEstado()
   }
 
+  const handleVoltarInicio = () => {
+    if (window.confirm('Deseja voltar para a tela inicial? O progresso atual será perdido.')) {
+      resetarEstado()
+      setShowModalFinalizacao(false)
+      setShowModalDuplicidade(false)
+      navigate('/')
+    }
+  }
+
   return (
     <>
       {(isOcrRunning || ocrError || feedbackMessage) && (
@@ -363,6 +373,12 @@ export default function Embalagem() {
           )}
         </div>
       )}
+
+      <div className="fixed top-4 left-4 z-50 pointer-events-auto">
+        <Button variant="outline" size="sm" onClick={handleVoltarInicio} className="bg-white/80 backdrop-blur border-gray-200">
+          Tela Inicial
+        </Button>
+      </div>
 
       {etapa === 1 && (
         <CameraCapture
