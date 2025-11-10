@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CameraCapture from '@/components/embalagem/CameraCapture'
+import ModalFinalizacao from '@/components/embalagem/ModalFinalizacao'
 import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
-import { useUploadFile, useExtractData, useCreateEmbalagem } from '@/hooks/useEmbalagens'
+import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import amplifyService from '@/services/amplify'
 
 export default function Embalagem() {
@@ -19,19 +20,23 @@ export default function Embalagem() {
   const [fotoCaixaKey, setFotoCaixaKey] = useState('')
 
   // Estados
+  const [showModalFinalizacao, setShowModalFinalizacao] = useState(false)
   const [showModalDuplicidade, setShowModalDuplicidade] = useState(false)
+  const [ultimoResumo, setUltimoResumo] = useState(null)
   const [embalagemOriginal, setEmbalagemOriginal] = useState(null)
   const [isDuplicada, setIsDuplicada] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isOcrRunning, setIsOcrRunning] = useState(false)
   const [ocrError, setOcrError] = useState(null)
   const [feedbackMessage, setFeedbackMessage] = useState(null)
+  const [isSalvandoObservacao, setIsSalvandoObservacao] = useState(false)
   const ocrJobIdRef = useRef(0)
   const feedbackTimeoutRef = useRef(null)
 
   const uploadFile = useUploadFile()
   const extractData = useExtractData()
   const createEmbalagem = useCreateEmbalagem()
+  const updateEmbalagem = useUpdateEmbalagem()
 
   useEffect(() => {
     const operadorData = localStorage.getItem('packflow_operador')
@@ -192,10 +197,21 @@ export default function Embalagem() {
         data_nf_original: embalagemOriginal?.createdAt || null,
       }
 
-      await createEmbalagem.mutateAsync(data)
+      const created = await createEmbalagem.mutateAsync(data)
 
-      resetarEstado()
+      setUltimoResumo({
+        id: created?.id,
+        nfNumber: created?.nf_number ?? data.nf_number,
+        clienteNome: created?.cliente_nome ?? data.cliente_nome,
+        tempoTotal: tempoTotalSegundos,
+        operadorNome: operador?.apelido || operador?.nome,
+        observacao: observacaoFinal,
+        status,
+      })
+      setShowModalFinalizacao(true)
+
       triggerFeedback('Embalagem salva!')
+      resetarEstado()
     } catch (error) {
       console.error('Erro ao finalizar embalagem:', error)
       alert('Erro ao salvar embalagem')
@@ -226,6 +242,34 @@ export default function Embalagem() {
     setIsOcrRunning(false)
     setOcrError(null)
     ocrJobIdRef.current = 0
+  }
+
+  const handleResumoConfirmado = () => {
+    setShowModalFinalizacao(false)
+    setUltimoResumo(null)
+  }
+
+  const handleSalvarObservacaoExtra = async (texto) => {
+    if (!ultimoResumo?.id || !texto) {
+      handleResumoConfirmado()
+      return
+    }
+
+    setIsSalvandoObservacao(true)
+    try {
+      await updateEmbalagem.mutateAsync({
+        id: ultimoResumo.id,
+        data: { observacao: texto }
+      })
+      triggerFeedback('Observação salva!')
+      setUltimoResumo((prev) => (prev ? { ...prev, observacao: texto } : prev))
+      handleResumoConfirmado()
+    } catch (error) {
+      console.error('Erro ao salvar observação:', error)
+      alert('Erro ao salvar observação')
+    } finally {
+      setIsSalvandoObservacao(false)
+    }
   }
 
   return (
@@ -277,6 +321,18 @@ export default function Embalagem() {
           subtitulo="Tire uma foto da embalagem pronta"
           onCapture={handleCaptureEtapa3}
           isProcessing={isProcessing}
+        />
+      )}
+
+      {showModalFinalizacao && ultimoResumo && (
+        <ModalFinalizacao
+          nfNumber={ultimoResumo.nfNumber}
+          clienteNome={ultimoResumo.clienteNome}
+          tempoTotal={ultimoResumo.tempoTotal}
+          operadorNome={ultimoResumo.operadorNome}
+          onFinalizar={handleResumoConfirmado}
+          onFinalizarComObservacao={handleSalvarObservacaoExtra}
+          isProcessing={isSalvandoObservacao}
         />
       )}
 
