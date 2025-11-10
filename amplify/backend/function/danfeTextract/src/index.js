@@ -40,6 +40,20 @@ const NF_PATTERNS = [
   /(?:DOCUMENTO)[^\d]{0,5}([\d.,]{3,20})/
 ];
 
+
+
+const CLIENTE_KEYWORD_PRIORITIES = [
+  ['DESTINATARIO', 'DESTINAT\u00c1RIO', 'CLIENTE', 'COMPRADOR', 'CONSUMIDOR'],
+  ['TOMADOR'],
+  ['REMETENTE', 'EMITENTE']
+];
+
+const CLIENTE_LINE_PATTERNS = [
+  /(DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR)[\s:.-]+([A-Z0-9\s]+)/,
+  /(TOMADOR)[\s:.-]+([A-Z0-9\s]+)/,
+  /(REMETENTE|EMITENTE)[\s:.-]+([A-Z0-9\s]+)/
+];
+
 const cleanNFValue = (value) => {
   if (!value) {
     return '';
@@ -130,10 +144,12 @@ const extractNFData = (lines) => {
 };
 
 const extractClienteFromLines = (lines) => {
-  for (const raw of lines) {
-    const match = raw.match(/(CLIENTE|DESTINAT[ÁA]RIO|EMITENTE|TOMADOR)[\s:]+([A-Z0-9\s]+)/);
-    if (match) {
-      return match[2].trim();
+  for (const pattern of CLIENTE_LINE_PATTERNS) {
+    for (const raw of lines) {
+      const match = raw.match(pattern);
+      if (match) {
+        return match[2].trim();
+      }
     }
   }
   return '';
@@ -172,7 +188,16 @@ const extractTextFromBlock = (block, blocksMap) => {
 };
 
 const extractClienteFromKeyValue = (blocks, blocksMap) => {
-  const keywords = ['CLIENTE', 'DESTINATARIO', 'DESTINATÁRIO', 'DESTINATARIA', 'TOMADOR', 'REMETENTE', 'EMITENTE'];
+  const prioritizedMatches = new Array(CLIENTE_KEYWORD_PRIORITIES.length).fill(null);
+
+  const getPriority = (label) => {
+    for (let i = 0; i < CLIENTE_KEYWORD_PRIORITIES.length; i += 1) {
+      if (CLIENTE_KEYWORD_PRIORITIES[i].some((kw) => label.includes(kw))) {
+        return i;
+      }
+    }
+    return -1;
+  };
 
   for (const block of blocks) {
     if (block.BlockType !== 'KEY_VALUE_SET' || !block.EntityTypes?.includes('KEY')) {
@@ -180,7 +205,8 @@ const extractClienteFromKeyValue = (blocks, blocksMap) => {
     }
 
     const label = extractTextFromBlock(block, blocksMap);
-    if (!keywords.some((kw) => label.includes(kw))) {
+    const priority = getPriority(label);
+    if (priority === -1 || prioritizedMatches[priority]) {
       continue;
     }
 
@@ -193,16 +219,21 @@ const extractClienteFromKeyValue = (blocks, blocksMap) => {
       const valueBlock = blocksMap.get(valueId);
       const valueText = extractTextFromBlock(valueBlock, blocksMap);
       if (valueText) {
-        return {
+        prioritizedMatches[priority] = {
           value: valueText.trim(),
           source: 'textract_key_value',
-          confidence: valueBlock?.Confidence || 0
+          confidence: valueBlock?.Confidence || block?.Confidence || 0
         };
+        break;
       }
+    }
+
+    if (prioritizedMatches[0]) {
+      break;
     }
   }
 
-  return null;
+  return prioritizedMatches.find(Boolean);
 };
 
 const extractClienteWithComprehend = async (text) => {

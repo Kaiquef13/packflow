@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CameraCapture from '@/components/embalagem/CameraCapture'
-import ModalFinalizacao from '@/components/embalagem/ModalFinalizacao'
 import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { useUploadFile, useExtractData, useCreateEmbalagem } from '@/hooks/useEmbalagens'
 import amplifyService from '@/services/amplify'
@@ -20,11 +19,15 @@ export default function Embalagem() {
   const [fotoCaixaKey, setFotoCaixaKey] = useState('')
 
   // Estados
-  const [showModalFinalizacao, setShowModalFinalizacao] = useState(false)
   const [showModalDuplicidade, setShowModalDuplicidade] = useState(false)
   const [embalagemOriginal, setEmbalagemOriginal] = useState(null)
   const [isDuplicada, setIsDuplicada] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isOcrRunning, setIsOcrRunning] = useState(false)
+  const [ocrError, setOcrError] = useState(null)
+  const [feedbackMessage, setFeedbackMessage] = useState(null)
+  const ocrJobIdRef = useRef(0)
+  const feedbackTimeoutRef = useRef(null)
 
   const uploadFile = useUploadFile()
   const extractData = useExtractData()
@@ -39,39 +42,71 @@ export default function Embalagem() {
     setOperador(JSON.parse(operadorData))
   }, [navigate])
 
-  const handleCaptureEtapa1 = async (file, preview) => {
-    setIsProcessing(true)
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const startOcrBackground = async (fileKey) => {
+    const jobId = Date.now()
+    ocrJobIdRef.current = jobId
+    setIsOcrRunning(true)
+    setOcrError(null)
 
     try {
-      // 1. Upload da foto
-      const { key: fileKey } = await uploadFile.mutateAsync(file)
-      setFotoDanfeKey(fileKey)
-
-      // 2. Extrair dados com OCR
       const ocrResult = await extractData.mutateAsync({ key: fileKey })
+      if (ocrJobIdRef.current !== jobId) return
+
       const extractedNf = ocrResult.nf_number || ''
       const extractedCliente = ocrResult.cliente_nome || ''
 
       setNfNumber(extractedNf)
       setClienteNome(extractedCliente)
 
-      // 3. Verificar duplicidade
       if (extractedNf) {
         const embalagens = await amplifyService.filterEmbalagens({ nf_number: { eq: extractedNf } })
+        if (ocrJobIdRef.current !== jobId) return
+
         const original = embalagens?.find(e => !e.is_duplicada)
 
         if (original) {
           setEmbalagemOriginal(original)
           setIsDuplicada(true)
           setShowModalDuplicidade(true)
-          setIsProcessing(false)
           return
         }
       }
 
-      // 4. Ir para etapa 2 (cronômetro começará na próxima etapa)
+      setIsDuplicada(false)
+      setEmbalagemOriginal(null)
+      setShowModalDuplicidade(false)
+    } catch (error) {
+      console.error('Erro na extracao da DANFE:', error)
+      if (ocrJobIdRef.current === jobId) {
+        setOcrError('Nao foi possivel extrair automaticamente. Preencha manualmente.')
+      }
+    } finally {
+      if (ocrJobIdRef.current === jobId) {
+        setIsOcrRunning(false)
+      }
+    }
+  }
+
+  const handleCaptureEtapa1 = async (file, preview) => {
+    setIsProcessing(true)
+
+    try {
+      const { key: fileKey } = await uploadFile.mutateAsync(file)
+      setFotoDanfeKey(fileKey)
       setIsProcessing(false)
+      if (!startTime) {
+        setStartTime(new Date())
+      }
       setEtapa(2)
+      startOcrBackground(fileKey)
     } catch (error) {
       console.error('Erro na etapa 1:', error)
       alert('Erro ao processar foto da DANFE')
@@ -81,8 +116,12 @@ export default function Embalagem() {
 
   const confirmarDuplicidade = () => {
     setShowModalDuplicidade(false)
-    setStartTime(new Date())
-    setEtapa(2)
+    if (!startTime) {
+      setStartTime(new Date())
+    }
+    if (etapa < 2) {
+      setEtapa(2)
+    }
   }
 
   const handleCaptureEtapa2 = async (file, preview) => {
@@ -91,9 +130,6 @@ export default function Embalagem() {
     try {
       const { key } = await uploadFile.mutateAsync(file)
       setFotoConteudoKey(key)
-
-      // Iniciar cronômetro na etapa 2 (primeira foto - produtos)
-      setStartTime(new Date())
 
       setIsProcessing(false)
       setEtapa(3)
@@ -110,8 +146,7 @@ export default function Embalagem() {
     try {
       const { key } = await uploadFile.mutateAsync(file)
       setFotoCaixaKey(key)
-      setIsProcessing(false)
-      setShowModalFinalizacao(true)
+      await finalizarEmbalagem('')
     } catch (error) {
       console.error('Erro na etapa 3:', error)
       alert('Erro ao fazer upload da foto')
@@ -124,20 +159,23 @@ export default function Embalagem() {
 
     try {
       const endTime = new Date()
-      const tempoTotalSegundos = Math.floor((endTime - startTime) / 1000)
+      const effectiveStart = startTime || endTime
+      const tempoTotalSegundos = Math.max(
+        1,
+        Math.floor((endTime - effectiveStart) / 1000)
+      )
 
-      // Definir status baseado no tempo
       const status = tempoTotalSegundos < 60 ? 'SUSPEITA' : 'CONCLUIDA'
 
-      // Adicionar alerta na observação se tempo for suspeito (< 60 segundos)
+      const alertaPrefix = observacao ? `${observacao}\n` : ''
       const observacaoFinal = tempoTotalSegundos < 60
-        ? `${observacao ? observacao + '\n' : ''}[ALERTA: Tempo suspeito - ${tempoTotalSegundos}s]`.trim()
+        ? `${alertaPrefix}[ALERTA: Tempo suspeito - ${tempoTotalSegundos}s]`.trim()
         : observacao || ''
 
       const data = {
         nf_number: nfNumber,
         cliente_nome: clienteNome,
-        start_time: startTime.toISOString(),
+        start_time: effectiveStart.toISOString(),
         end_time: endTime.toISOString(),
         tempo_total_segundos: tempoTotalSegundos,
         foto_danfe_url: fotoDanfeKey,
@@ -156,13 +194,21 @@ export default function Embalagem() {
 
       await createEmbalagem.mutateAsync(data)
 
-      // Resetar para próxima embalagem
       resetarEstado()
+      triggerFeedback('Embalagem salva!')
     } catch (error) {
       console.error('Erro ao finalizar embalagem:', error)
       alert('Erro ao salvar embalagem')
       setIsProcessing(false)
     }
+  }
+
+  const triggerFeedback = (message) => {
+    setFeedbackMessage(message)
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current)
+    }
+    feedbackTimeoutRef.current = setTimeout(() => setFeedbackMessage(null), 3000)
   }
 
   const resetarEstado = () => {
@@ -173,17 +219,37 @@ export default function Embalagem() {
     setFotoDanfeKey('')
     setFotoConteudoKey('')
     setFotoCaixaKey('')
-    setShowModalFinalizacao(false)
     setShowModalDuplicidade(false)
     setEmbalagemOriginal(null)
     setIsDuplicada(false)
     setIsProcessing(false)
+    setIsOcrRunning(false)
+    setOcrError(null)
+    ocrJobIdRef.current = 0
   }
-
-  const tempoTotal = startTime ? Math.floor((new Date() - startTime) / 1000) : 0
 
   return (
     <>
+      {(isOcrRunning || ocrError || feedbackMessage) && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
+          {isOcrRunning && (
+            <div className="bg-white/90 text-indigo-700 px-4 py-2 rounded shadow">
+              Extraindo dados da DANFE em segundo plano...
+            </div>
+          )}
+          {ocrError && (
+            <div className="bg-red-50 text-red-700 px-4 py-2 rounded shadow">
+              {ocrError}
+            </div>
+          )}
+          {feedbackMessage && (
+            <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded shadow">
+              {feedbackMessage}
+            </div>
+          )}
+        </div>
+      )}
+
       {etapa === 1 && (
         <CameraCapture
           etapa={1}
@@ -210,18 +276,6 @@ export default function Embalagem() {
           titulo="FOTO DA CAIXA FECHADA"
           subtitulo="Tire uma foto da embalagem pronta"
           onCapture={handleCaptureEtapa3}
-          isProcessing={isProcessing}
-        />
-      )}
-
-      {showModalFinalizacao && (
-        <ModalFinalizacao
-          nfNumber={nfNumber}
-          clienteNome={clienteNome}
-          tempoTotal={tempoTotal}
-          operadorNome={operador?.apelido || operador?.nome}
-          onFinalizar={() => finalizarEmbalagem('')}
-          onFinalizarComObservacao={finalizarEmbalagem}
           isProcessing={isProcessing}
         />
       )}
