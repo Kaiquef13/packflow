@@ -165,7 +165,7 @@ export default function GestaoOperadores() {
 
         {/* Modal de Cadastro/Edição */}
         <Dialog open={showModal} onOpenChange={setShowModal}>
-          <DialogContent>
+          <DialogContent className="w-[92vw] sm:w-full max-w-md sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>
                 {editando ? 'Editar Operador' : 'Novo Operador'}

@@ -71,8 +71,8 @@ export default function ModalDuplicidade({
 
   return (
     <Dialog open={true}>
-      <DialogContent className="max-w-md border-4 border-orange-500">
-        <DialogHeader className="bg-gradient-to-r from-orange-500 to-red-600 -m-6 mb-0 p-6 rounded-t-lg">
+      <DialogContent className="w-[92vw] sm:w-full max-w-md border-4 border-orange-500 p-0">
+        <DialogHeader className="bg-gradient-to-r from-orange-500 to-red-600 rounded-t-lg px-4 py-5 sm:px-6 sm:py-6">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: [0, 1.2, 1] }}
@@ -99,7 +99,7 @@ export default function ModalDuplicidade({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="p-6 space-y-4">
+        <div className="px-4 py-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

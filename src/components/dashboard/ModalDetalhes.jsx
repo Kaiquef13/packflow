@@ -117,7 +117,7 @@ export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSucc
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <span>NF: {embalagem.nf_number || 'Sem número'}</span>
