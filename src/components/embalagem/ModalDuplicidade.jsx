@@ -149,25 +149,6 @@ export default function ModalDuplicidade({
             </div>
           </div>
 
-          {isAuto && resumoDuplicidade && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-900">
-              <p className="font-semibold">Resumo do registro duplicado</p>
-              <p>Operador: {resumoDuplicidade.operadorNome || '-'}</p>
-              {resumoDuplicidade.originalOperador && (
-                <p>Operador original: {resumoDuplicidade.originalOperador}</p>
-              )}
-              {resumoDuplicidade.originalData && (
-                <p>Data original: {formatDateTime(resumoDuplicidade.originalData)}</p>
-              )}
-            </div>
-          )}
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-900">
-              <strong>Atenção:</strong> Verifique com o supervisor antes de continuar. Esta embalagem será marcada como duplicada no sistema.
-            </p>
-          </div>
-
           <Button
             onClick={onConfirmar}
             disabled={isProcessing}
