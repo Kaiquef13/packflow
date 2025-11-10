@@ -172,7 +172,7 @@ export default function GestaoOperadores() {
               </DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 px-4 sm:px-6">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">
                   Nome Completo *

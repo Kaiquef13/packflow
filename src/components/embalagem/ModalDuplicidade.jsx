@@ -71,7 +71,7 @@ export default function ModalDuplicidade({
 
   return (
     <Dialog open={true}>
-      <DialogContent className="w-[92vw] sm:w-full max-w-md border-4 border-orange-500 p-0">
+      <DialogContent className="w-[92vw] sm:w-full max-w-md border-4 border-orange-500 p-0 rounded-lg max-h-[85vh] overflow-hidden">
         <DialogHeader className="bg-gradient-to-r from-orange-500 to-red-600 rounded-t-lg px-4 py-5 sm:px-6 sm:py-6">
           <motion.div
             initial={{ scale: 0 }}
@@ -99,20 +99,17 @@ export default function ModalDuplicidade({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="px-4 py-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="px-4 py-5 sm:px-6 sm:py-6 space-y-4 overflow-y-auto max-h-[calc(85vh-120px)]">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-orange-50 border-2 border-orange-400 rounded-lg p-4"
           >
             <p className="text-center font-bold text-orange-900 text-lg mb-2">
-              {isAuto ? 'Duplicidade salva automaticamente!' : 'Esta NF já foi embalada!'}
+              {isAuto ? 'Duplicidade registrada automaticamente.' : 'Esta NF já foi embalada!'}
             </p>
             <p className="text-center text-orange-800 text-sm">
-              A nota fiscal <strong>{displayNf}</strong>{' '}
-              {isAuto
-                ? 'foi registrada automaticamente como duplicada.'
-                : 'já foi processada anteriormente.'}
+              A nota fiscal <strong>{displayNf}</strong> já existe no sistema.
             </p>
           </motion.div>
 
@@ -167,10 +164,7 @@ export default function ModalDuplicidade({
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-900">
-              <strong>Atenção:</strong>{' '}
-              {isAuto
-                ? 'Registro duplicado criado automaticamente. Revise com o supervisor se necessário.'
-                : 'Verifique com o supervisor antes de continuar. Esta embalagem será marcada como duplicada no sistema.'}
+              <strong>Atenção:</strong> Verifique com o supervisor antes de continuar. Esta embalagem será marcada como duplicada no sistema.
             </p>
           </div>
 
@@ -186,7 +180,7 @@ export default function ModalDuplicidade({
                 Processando...
               </>
             ) : (
-              isAuto ? 'OK - Proxima NF' : 'Entendi - Registrar como duplicada'
+              isAuto ? 'OK - Próxima NF' : 'Entendi - Registrar como duplicada'
             )}
           </Button>
         </div>

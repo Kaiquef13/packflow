@@ -117,7 +117,7 @@ export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSucc
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <span>NF: {embalagem.nf_number || 'Sem número'}</span>
@@ -136,9 +136,9 @@ export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSucc
               </Badge>
             </DialogTitle>
           </DialogHeader>
-
-          {/* Galeria de Fotos */}
-          <div className="space-y-4 mt-6">
+          <div className="px-4 sm:px-6 pb-6 space-y-6 overflow-y-auto max-h-[calc(90vh-90px)]">
+            {/* Galeria de Fotos */}
+            <div className="space-y-4 mt-2">
             <h3 className="font-semibold text-lg">Fotos da Embalagem</h3>
             <div className="grid grid-cols-3 gap-4">
               {fotos.map((foto, idx) => (
@@ -302,6 +302,7 @@ export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSucc
               Fechar
             </Button>
           </div>
+        </div>
         </DialogContent>
       </Dialog>
 
