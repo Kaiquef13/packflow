@@ -9,34 +9,31 @@ export default function ModalDuplicidade({
   nfNumber,
   embalagemOriginal,
   onConfirmar,
-  isProcessing = false
+  isProcessing = false,
+  autoSaved = false,
+  resumoDuplicidade = null
 }) {
   const audioContextRef = useRef(null)
   const oscillatorRef = useRef(null)
+  const isAuto = autoSaved && !!resumoDuplicidade
+  const displayNf = resumoDuplicidade?.nfNumber || nfNumber
 
-  // Tocar sirene sonora
   useEffect(() => {
     const playAlarmSound = () => {
       try {
-        // Criar contexto de áudio
         const audioContext = new (window.AudioContext || window.webkitAudioContext)()
         audioContextRef.current = audioContext
 
-        // Criar oscilador
         const oscillator = audioContext.createOscillator()
         const gainNode = audioContext.createGain()
 
         oscillator.connect(gainNode)
         gainNode.connect(audioContext.destination)
 
-        // Configurar sirene (alternando entre duas frequências)
         oscillator.type = 'sine'
         oscillator.frequency.value = 800
-
-        // Volume
         gainNode.gain.value = 0.3
 
-        // Alternar frequências para criar efeito de sirene
         let toggle = false
         const interval = setInterval(() => {
           oscillator.frequency.value = toggle ? 600 : 800
@@ -44,10 +41,8 @@ export default function ModalDuplicidade({
         }, 200)
 
         oscillatorRef.current = { oscillator, interval }
-
         oscillator.start()
 
-        // Parar após 3 segundos
         setTimeout(() => {
           oscillator.stop()
           clearInterval(interval)
@@ -60,13 +55,12 @@ export default function ModalDuplicidade({
     playAlarmSound()
 
     return () => {
-      // Cleanup
       if (oscillatorRef.current) {
         try {
           oscillatorRef.current.oscillator.stop()
           clearInterval(oscillatorRef.current.interval)
-        } catch (e) {
-          // Ignore
+        } catch {
+          /* ignore */
         }
       }
       if (audioContextRef.current) {
@@ -101,40 +95,37 @@ export default function ModalDuplicidade({
             </motion.div>
           </motion.div>
           <DialogTitle className="text-center text-white text-2xl">
-            ⚠️ NOTA FISCAL DUPLICADA!
+            {isAuto ? 'Duplicidade registrada!' : '⚠ NOTA FISCAL DUPLICADA!'}
           </DialogTitle>
         </DialogHeader>
 
         <div className="p-6 space-y-4">
-          {/* Alerta */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-orange-50 border-2 border-orange-400 rounded-lg p-4"
           >
             <p className="text-center font-bold text-orange-900 text-lg mb-2">
-              Esta NF já foi embalada!
+              {isAuto ? 'Duplicidade salva automaticamente!' : 'Esta NF já foi embalada!'}
             </p>
             <p className="text-center text-orange-800 text-sm">
-              A nota fiscal <strong>{nfNumber}</strong> já foi processada anteriormente.
+              A nota fiscal <strong>{displayNf}</strong>{' '}
+              {isAuto
+                ? 'foi registrada automaticamente como duplicada.'
+                : 'já foi processada anteriormente.'}
             </p>
           </motion.div>
 
-          {/* Dados da embalagem original */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-            <h3 className="font-semibold text-gray-900 mb-2">
-              Informações da Embalagem Original:
-            </h3>
-
+            <h3 className="font-semibold text-gray-900 mb-2">Informações da embalagem original:</h3>
             <div className="space-y-2">
               <div className="flex items-start gap-2">
                 <Package className="w-5 h-5 text-gray-600 mt-0.5" />
                 <div>
                   <p className="text-sm text-gray-600">NF</p>
-                  <p className="font-medium">{embalagemOriginal?.nf_number || nfNumber}</p>
+                  <p className="font-medium">{embalagemOriginal?.nf_number || displayNf}</p>
                 </div>
               </div>
-
               <div className="flex items-start gap-2">
                 <User className="w-5 h-5 text-gray-600 mt-0.5" />
                 <div>
@@ -142,7 +133,6 @@ export default function ModalDuplicidade({
                   <p className="font-medium">{embalagemOriginal?.cliente_nome || '-'}</p>
                 </div>
               </div>
-
               <div className="flex items-start gap-2">
                 <User className="w-5 h-5 text-gray-600 mt-0.5" />
                 <div>
@@ -150,26 +140,40 @@ export default function ModalDuplicidade({
                   <p className="font-medium">{embalagemOriginal?.operador_nome || '-'}</p>
                 </div>
               </div>
-
               <div className="flex items-start gap-2">
                 <Calendar className="w-5 h-5 text-gray-600 mt-0.5" />
                 <div>
                   <p className="text-sm text-gray-600">Data/Hora</p>
-                  <p className="font-medium">{formatDateTime(embalagemOriginal?.createdAt || embalagemOriginal?.start_time)}</p>
+                  <p className="font-medium">
+                    {formatDateTime(embalagemOriginal?.createdAt || embalagemOriginal?.start_time)}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Instruções */}
+          {isAuto && resumoDuplicidade && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-900">
+              <p className="font-semibold">Resumo do registro duplicado</p>
+              <p>Operador: {resumoDuplicidade.operadorNome || '-'}</p>
+              {resumoDuplicidade.originalOperador && (
+                <p>Operador original: {resumoDuplicidade.originalOperador}</p>
+              )}
+              {resumoDuplicidade.originalData && (
+                <p>Data original: {formatDateTime(resumoDuplicidade.originalData)}</p>
+              )}
+            </div>
+          )}
+
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-900">
-              <strong>Atenção:</strong> Verifique com o supervisor antes de continuar.
-              Esta embalagem será marcada como duplicada no sistema.
+              <strong>Atenção:</strong>{' '}
+              {isAuto
+                ? 'Registro duplicado criado automaticamente. Revise com o supervisor se necessário.'
+                : 'Verifique com o supervisor antes de continuar. Esta embalagem será marcada como duplicada no sistema.'}
             </p>
           </div>
 
-          {/* Botão */}
           <Button
             onClick={onConfirmar}
             disabled={isProcessing}
@@ -182,7 +186,7 @@ export default function ModalDuplicidade({
                 Processando...
               </>
             ) : (
-              'Entendi - Registrar como Duplicada'
+              isAuto ? 'OK - Proxima NF' : 'Entendi - Registrar como duplicada'
             )}
           </Button>
         </div>

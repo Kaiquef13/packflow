@@ -30,6 +30,8 @@ export default function Embalagem() {
   const [ocrError, setOcrError] = useState(null)
   const [feedbackMessage, setFeedbackMessage] = useState(null)
   const [isSalvandoObservacao, setIsSalvandoObservacao] = useState(false)
+  const [duplicidadeAutoResumo, setDuplicidadeAutoResumo] = useState(null)
+  const [isRegistrandoDuplicidade, setIsRegistrandoDuplicidade] = useState(false)
   const ocrJobIdRef = useRef(0)
   const feedbackTimeoutRef = useRef(null)
 
@@ -80,7 +82,25 @@ export default function Embalagem() {
         if (original) {
           setEmbalagemOriginal(original)
           setIsDuplicada(true)
-          setShowModalDuplicidade(true)
+          try {
+            const resumo = await registrarDuplicidadeAutomatica({
+              original,
+              nfNumberValue: extractedNf,
+              clienteValue: extractedCliente,
+              fileKey
+            })
+            if (ocrJobIdRef.current !== jobId) return
+            setDuplicidadeAutoResumo(resumo)
+            setShowModalDuplicidade(true)
+          } catch (registroErro) {
+            console.error('Erro ao registrar duplicidade automaticamente:', registroErro)
+            alert('Erro ao registrar duplicidade automaticamente. Tente novamente.')
+            setDuplicidadeAutoResumo(null)
+            setShowModalDuplicidade(true)
+          } finally {
+            setIsProcessing(false)
+            setIsOcrRunning(false)
+          }
           return
         }
       }
@@ -219,6 +239,50 @@ export default function Embalagem() {
     }
   }
 
+  const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey }) => {
+    setIsRegistrandoDuplicidade(true)
+    try {
+      const now = new Date()
+      const nfValue = nfNumberValue || nfNumber
+      const cliente = clienteValue || clienteNome
+      const observacaoDup = `[DUPLICIDADE] Registro vinculado à NF original ${original?.nf_number || original?.id || ''}`
+
+      const data = {
+        nf_number: nfValue,
+        cliente_nome: cliente,
+        start_time: now.toISOString(),
+        end_time: now.toISOString(),
+        tempo_total_segundos: 0,
+        foto_danfe_url: fileKey,
+        foto_conteudo_url: null,
+        foto_caixa_url: null,
+        observacao: observacaoDup,
+        operador_id: operador?.id,
+        operador_nome: operador?.apelido || operador?.nome,
+        pendente_extracao: false,
+        status: 'CANCELADA',
+        tem_avaria: false,
+        is_duplicada: true,
+        nf_original_id: original?.id || null,
+        data_nf_original: original?.createdAt || original?.start_time || null,
+      }
+
+      const record = await createEmbalagem.mutateAsync(data)
+      triggerFeedback('Duplicidade registrada!')
+
+      return {
+        id: record?.id ?? data.nf_number,
+        nfNumber: record?.nf_number ?? nfValue,
+        clienteNome: record?.cliente_nome ?? cliente,
+        operadorNome: operador?.apelido || operador?.nome,
+        originalOperador: original?.operador_nome || '-',
+        originalData: original?.createdAt || original?.start_time || null,
+      }
+    } finally {
+      setIsRegistrandoDuplicidade(false)
+    }
+  }
+
   const triggerFeedback = (message) => {
     setFeedbackMessage(message)
     if (feedbackTimeoutRef.current) {
@@ -270,6 +334,12 @@ export default function Embalagem() {
     } finally {
       setIsSalvandoObservacao(false)
     }
+  }
+
+  const handleDuplicidadeAutoConfirm = () => {
+    setShowModalDuplicidade(false)
+    setDuplicidadeAutoResumo(null)
+    resetarEstado()
   }
 
   return (
@@ -338,10 +408,12 @@ export default function Embalagem() {
 
       {showModalDuplicidade && (
         <ModalDuplicidade
-          nfNumber={nfNumber}
+          nfNumber={duplicidadeAutoResumo?.nfNumber || nfNumber}
           embalagemOriginal={embalagemOriginal}
-          onConfirmar={confirmarDuplicidade}
-          isProcessing={isProcessing}
+          autoSaved={Boolean(duplicidadeAutoResumo)}
+          resumoDuplicidade={duplicidadeAutoResumo}
+          onConfirmar={duplicidadeAutoResumo ? handleDuplicidadeAutoConfirm : confirmarDuplicidade}
+          isProcessing={isRegistrandoDuplicidade || isProcessing}
         />
       )}
     </>
