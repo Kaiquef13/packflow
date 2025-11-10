@@ -374,8 +374,8 @@ export default function Embalagem() {
         </div>
       )}
 
-      <div className="fixed top-4 left-4 z-[60] pointer-events-auto">
-        <Button variant="outline" size="sm" onClick={handleVoltarInicio} className="bg-white/80 backdrop-blur border-gray-200">
+      <div className="fixed top-28 right-4 z-[60] pointer-events-auto opacity-90">
+        <Button variant="outline" size="sm" onClick={handleVoltarInicio} className="bg-white/80 backdrop-blur border-gray-200 shadow">
           Tela Inicial
         </Button>
       </div>
