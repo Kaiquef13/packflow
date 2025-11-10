@@ -58,6 +58,11 @@
     }
   },
   "function": {
+    "LambdaTeste": {
+      "build": true,
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
+    },
     "danfeTextract": {
       "build": true,
       "dependsOn": [
@@ -74,6 +79,22 @@
     }
   },
   "parameters": {
+    "AMPLIFY_function_LambdaTeste_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "LambdaTeste"
+        }
+      ]
+    },
+    "AMPLIFY_function_LambdaTeste_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "LambdaTeste"
+        }
+      ]
+    },
     "AMPLIFY_function_danfeTextract_deploymentBucketName": {
       "usedBy": [
         {

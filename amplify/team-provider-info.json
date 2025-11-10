@@ -54,7 +54,11 @@
           "deploymentBucketName": "amplify-testesite-prod-87346-deployment",
           "s3Key": "amplify-builds/danfeTextract-61546f617a4d4c553934-build.zip"
         },
-        "packflowstorage": {}
+        "packflowstorage": {},
+        "LambdaTeste": {
+          "deploymentBucketName": "amplify-testesite-prod-87346-deployment",
+          "s3Key": "amplify-builds/LambdaTeste-6b784951637441342b74-build.zip"
+        }
       },
       "api": {
         "testesite": {},

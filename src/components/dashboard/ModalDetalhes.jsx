@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X, AlertTriangle, Check, Eye, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,20 +7,67 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import ModalAvaria from './ModalAvaria'
 import ImageLightbox from './ImageLightbox'
+import amplifyService from '@/services/amplify'
 
 export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSuccess }) {
   const [showModalAvaria, setShowModalAvaria] = useState(false)
   const [selectedImageIndex, setSelectedImageIndex] = useState(null)
   const [isRemoving, setIsRemoving] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [fotoUrls, setFotoUrls] = useState([])
+  const [isLoadingFotos, setIsLoadingFotos] = useState(false)
   const updateEmbalagem = useUpdateEmbalagem()
 
   if (!embalagem) return null
 
+  useEffect(() => {
+    let isActive = true
+
+    const loadFotos = async () => {
+      if (!isOpen || !embalagem) {
+        if (isActive) {
+          setFotoUrls([])
+        }
+        return
+      }
+
+      setIsLoadingFotos(true)
+      try {
+        const fotoValues = [
+          embalagem.foto_danfe_url,
+          embalagem.foto_conteudo_url,
+          embalagem.foto_caixa_url
+        ]
+
+        const resolved = await Promise.all(
+          fotoValues.map((value) => amplifyService.resolvePublicFileUrl(value))
+        )
+
+        if (isActive) {
+          setFotoUrls(resolved)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar fotos da embalagem:', error)
+        if (isActive) {
+          setFotoUrls([])
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingFotos(false)
+        }
+      }
+    }
+
+    loadFotos()
+    return () => {
+      isActive = false
+    }
+  }, [embalagem, isOpen])
+
   const fotos = [
-    { url: embalagem.foto_danfe_url, titulo: 'DANFE' },
-    { url: embalagem.foto_conteudo_url, titulo: 'Produtos' },
-    { url: embalagem.foto_caixa_url, titulo: 'Caixa Fechada' }
+    { url: fotoUrls[0], titulo: 'DANFE' },
+    { url: fotoUrls[1], titulo: 'Produtos' },
+    { url: fotoUrls[2], titulo: 'Caixa Fechada' }
   ]
 
   const formatDateTime = (dateString) => {
@@ -97,10 +144,20 @@ export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSucc
               {fotos.map((foto, idx) => (
                 <div
                   key={idx}
-                  className="relative rounded-lg overflow-hidden bg-gray-100 cursor-pointer group"
-                  onClick={() => setSelectedImageIndex(idx)}
+                  className={`relative rounded-lg overflow-hidden bg-gray-100 ${
+                    isLoadingFotos || !foto.url ? 'cursor-default' : 'cursor-pointer'
+                  } group`}
+                  onClick={() => {
+                    if (!isLoadingFotos && foto.url) {
+                      setSelectedImageIndex(idx)
+                    }
+                  }}
                 >
-                  {foto.url ? (
+                  {isLoadingFotos ? (
+                    <div className="w-full h-32 flex items-center justify-center text-gray-400">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    </div>
+                  ) : foto.url ? (
                     <>
                       <img
                         src={foto.url}

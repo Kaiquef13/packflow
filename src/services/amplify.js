@@ -312,7 +312,7 @@ export async function uploadFile(file) {
   try {
     const fileName = `fotos/${Date.now()}_${file.name}`;
 
-    const result = await uploadData({
+    await uploadData({
       key: fileName,
       data: file,
       options: {
@@ -321,63 +321,137 @@ export async function uploadFile(file) {
       }
     }).result;
 
-    // Obter URL pÃºblica
-    const urlResult = await getUrl({
-      key: fileName,
-      options: { level: 'public' }
-    });
-
-    return {
-      file_url: urlResult.url.toString(),
-      key: fileName
-    };
+    return { key: fileName };
   } catch (error) {
     console.error('Erro ao fazer upload:', error);
     throw error;
   }
 }
 
-// ============ OCR (AWS Textract) ============
-
-const textractApiConfig = awsconfig.aws_cloud_logic_custom?.find((api) => api.name === 'textractapi');
-const textractApiName = textractApiConfig?.name;
-
-export async function extractDataFromFile({ key }) {
-  if (!key) {
-    throw new Error('Arquivo sem referencia (key) para OCR.');
-  }
-
-  if (!textractApiName) {
-    throw new Error('Endpoint Textract nao configurado.');
-  }
-
-  const bucket = awsconfig.aws_user_files_s3_bucket;
-  const s3Key = key.startsWith('public/') ? key : `public/${key}`;
-
-  try {
-    const restOperation = post({
-      apiName: textractApiName,
-      path: '/ocr',
-      options: {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: {
-          key: s3Key,
-          bucket
-        }
-      }
-    });
-
-    const { body } = await restOperation.response;
-    const data = await body.json();
-    return data;
-  } catch (error) {
-    console.error('Erro ao extrair dados com Textract:', error);
-    throw error;
-  }
-}
-
+export async function resolvePublicFileUrl(value, options = {}) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (/^data:/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  let key = trimmed;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const pathname = parsed.pathname.replace(/^\/+/, '');
+      const publicIndex = pathname.indexOf('public/');
+      key = publicIndex >= 0 ? pathname.slice(publicIndex + 'public/'.length) : pathname;
+    } catch (error) {
+      console.warn('URL de foto invalida, usando valor original', error);
+      return trimmed;
+    }
+  }
+
+  key = key.replace(/^public\//, '');
+
+  try {
+    const urlResult = await getUrl({
+      key,
+      options: {
+        level: 'public',
+        expiresIn: options.expiresIn ?? 3600
+      }
+    });
+    return urlResult.url.toString();
+  } catch (error) {
+    console.error('Erro ao gerar URL assinada para foto:', error);
+    return trimmed;
+  }
+}
+
+// ============ OCR (AWS Textract) ============
+
+
+
+const textractApiConfig = awsconfig.aws_cloud_logic_custom?.find((api) => api.name === 'textractapi');
+
+const textractApiName = textractApiConfig?.name;
+
+
+
+export async function extractDataFromFile({ key }) {
+
+  if (!key) {
+
+    throw new Error('Arquivo sem referencia (key) para OCR.');
+
+  }
+
+
+
+  if (!textractApiName) {
+
+    throw new Error('Endpoint Textract nao configurado.');
+
+  }
+
+
+
+  const bucket = awsconfig.aws_user_files_s3_bucket;
+
+  const s3Key = key.startsWith('public/') ? key : `public/${key}`;
+
+
+
+  try {
+
+    const restOperation = post({
+
+      apiName: textractApiName,
+
+      path: '/ocr',
+
+      options: {
+
+        headers: {
+
+          'Content-Type': 'application/json'
+
+        },
+
+        body: {
+
+          key: s3Key,
+
+          bucket
+
+        }
+
+      }
+
+    });
+
+
+
+    const { body } = await restOperation.response;
+
+    const data = await body.json();
+
+    return data;
+
+  } catch (error) {
+
+    console.error('Erro ao extrair dados com Textract:', error);
+
+    throw error;
+
+  }
+
+}
+
+
+
 const amplifyService = {
   // Operadores
   listOperadores,
@@ -394,6 +468,7 @@ const amplifyService = {
 
   // Storage
   uploadFile,
+  resolvePublicFileUrl,
 
   // OCR
   extractDataFromFile,

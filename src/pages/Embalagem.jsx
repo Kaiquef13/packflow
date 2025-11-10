@@ -15,9 +15,9 @@ export default function Embalagem() {
   // Dados da embalagem
   const [nfNumber, setNfNumber] = useState('')
   const [clienteNome, setClienteNome] = useState('')
-  const [fotoDanfeUrl, setFotoDanfeUrl] = useState('')
-  const [fotoConteudoUrl, setFotoConteudoUrl] = useState('')
-  const [fotoCaixaUrl, setFotoCaixaUrl] = useState('')
+  const [fotoDanfeKey, setFotoDanfeKey] = useState('')
+  const [fotoConteudoKey, setFotoConteudoKey] = useState('')
+  const [fotoCaixaKey, setFotoCaixaKey] = useState('')
 
   // Estados
   const [showModalFinalizacao, setShowModalFinalizacao] = useState(false)
@@ -44,10 +44,8 @@ export default function Embalagem() {
 
     try {
       // 1. Upload da foto
-      const uploadResult = await uploadFile.mutateAsync(file)
-      const fileUrl = uploadResult.file_url
-      const fileKey = uploadResult.key
-      setFotoDanfeUrl(fileUrl)
+      const { key: fileKey } = await uploadFile.mutateAsync(file)
+      setFotoDanfeKey(fileKey)
 
       // 2. Extrair dados com OCR
       const ocrResult = await extractData.mutateAsync({ key: fileKey })
@@ -91,8 +89,8 @@ export default function Embalagem() {
     setIsProcessing(true)
 
     try {
-      const uploadResult = await uploadFile.mutateAsync(file)
-      setFotoConteudoUrl(uploadResult.file_url)
+      const { key } = await uploadFile.mutateAsync(file)
+      setFotoConteudoKey(key)
 
       // Iniciar cronômetro na etapa 2 (primeira foto - produtos)
       setStartTime(new Date())
@@ -110,8 +108,8 @@ export default function Embalagem() {
     setIsProcessing(true)
 
     try {
-      const uploadResult = await uploadFile.mutateAsync(file)
-      setFotoCaixaUrl(uploadResult.file_url)
+      const { key } = await uploadFile.mutateAsync(file)
+      setFotoCaixaKey(key)
       setIsProcessing(false)
       setShowModalFinalizacao(true)
     } catch (error) {
@@ -142,9 +140,9 @@ export default function Embalagem() {
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         tempo_total_segundos: tempoTotalSegundos,
-        foto_danfe_url: fotoDanfeUrl,
-        foto_conteudo_url: fotoConteudoUrl,
-        foto_caixa_url: fotoCaixaUrl,
+        foto_danfe_url: fotoDanfeKey,
+        foto_conteudo_url: fotoConteudoKey,
+        foto_caixa_url: fotoCaixaKey,
         observacao: observacaoFinal,
         operador_id: operador.id,
         operador_nome: operador.apelido || operador.nome,
@@ -172,9 +170,9 @@ export default function Embalagem() {
     setStartTime(null)
     setNfNumber('')
     setClienteNome('')
-    setFotoDanfeUrl('')
-    setFotoConteudoUrl('')
-    setFotoCaixaUrl('')
+    setFotoDanfeKey('')
+    setFotoConteudoKey('')
+    setFotoCaixaKey('')
     setShowModalFinalizacao(false)
     setShowModalDuplicidade(false)
     setEmbalagemOriginal(null)
