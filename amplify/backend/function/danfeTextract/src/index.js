@@ -123,13 +123,13 @@ const cleanClienteValue = (value) => {
     }
   }
 
-  sanitized = sanitized.replace(/^[^A-Z0-9]+/g, '').replace(/[^A-Z0-9]+$/g, '').trim();
+  sanitized = sanitized.replace(/^[\s:.-]+/g, '').replace(/[\s:.-]+$/g, '').trim();
 
   if (sanitized.length < 3) {
     return '';
   }
 
-  if (!/[A-Z]/.test(sanitized)) {
+  if (!/[A-Z\u00C0-\u00DD]/.test(sanitized)) {
     return '';
   }
 
