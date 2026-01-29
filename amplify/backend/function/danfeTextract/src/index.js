@@ -34,9 +34,12 @@ const normalizeEvent = (event) => {
 };
 
 const NF_PATTERNS = [
+  /\bNF(?:-?E)?\b[^\d]{0,10}([\d.,]{3,20})/,
+  /\bN[º°]?\s*NF(?:-?E)?\b[^\d]{0,10}([\d.,]{3,20})/,
+  /\bN[ÚU]MERO\s+DA\s+NF(?:-?E)?\b[^\d]{0,10}([\d.,]{3,20})/,
+  /\bNOTA\s+FISCAL(?:\s+ELETRONICA|\s+ELETRÔNICA)?\b[^\d]{0,10}([\d.,]{3,20})/,
   /(?:N[\sº°:#.-]*(?:DA\s+NOTA\s+FISCAL|NF|NFE|NFCE)?[\sº°:#.-]*)([\d.,]{3,20})/,
   /(?:N[ÚU]MERO|NUMERO)[^\d]{0,5}([\d.,]{3,20})/,
-  /(?:NOTA\s+FISCAL)[^\d]{0,10}([\d.,]{3,20})/,
   /(?:DOCUMENTO)[^\d]{0,5}([\d.,]{3,20})/
 ];
 
@@ -68,6 +71,16 @@ const cleanNFValue = (value) => {
   }
 
   return '';
+};
+
+const deriveNfFromChave = (chaveAcesso) => {
+  if (!chaveAcesso || chaveAcesso.length !== 44) {
+    return '';
+  }
+
+  // nNF ocupa as posições 26-34 (1-based) da chave de acesso NF-e
+  const nfCandidate = chaveAcesso.slice(25, 34);
+  return cleanNFValue(nfCandidate);
 };
 
 const collectAccessKeyDigits = (lines, startIndex) => {
@@ -138,6 +151,10 @@ const extractNFData = (lines) => {
     if (nfNumber && chaveAcesso) {
       break;
     }
+  }
+
+  if (!nfNumber && chaveAcesso) {
+    nfNumber = deriveNfFromChave(chaveAcesso);
   }
 
   return { nfNumber, chaveAcesso };

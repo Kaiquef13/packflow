@@ -172,7 +172,7 @@ export default function Embalagem() {
     try {
       const { key } = await uploadFile.mutateAsync(file)
       setFotoCaixaKey(key)
-      await finalizarEmbalagem('')
+      await finalizarEmbalagem('', { fotoCaixaKey: key })
     } catch (error) {
       console.error('Erro na etapa 3:', error)
       alert('Erro ao fazer upload da foto')
@@ -180,7 +180,7 @@ export default function Embalagem() {
     }
   }
 
-  const finalizarEmbalagem = async (observacao = '') => {
+  const finalizarEmbalagem = async (observacao = '', overrides = {}) => {
     setIsProcessing(true)
 
     try {
@@ -206,7 +206,7 @@ export default function Embalagem() {
         tempo_total_segundos: tempoTotalSegundos,
         foto_danfe_url: fotoDanfeKey,
         foto_conteudo_url: fotoConteudoKey,
-        foto_caixa_url: fotoCaixaKey,
+        foto_caixa_url: overrides.fotoCaixaKey ?? fotoCaixaKey,
         observacao: observacaoFinal,
         operador_id: operador.id,
         operador_nome: operador.apelido || operador.nome,

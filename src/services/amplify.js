@@ -146,8 +146,8 @@ export async function deleteOperador(id) {
 export async function listEmbalagens(sortDirection = 'DESC') {
   try {
     const query = /* GraphQL */ `
-      query ListEmbalagems {
-        listEmbalagems {
+      query ListEmbalagems($limit: Int, $nextToken: String) {
+        listEmbalagems(limit: $limit, nextToken: $nextToken) {
           items {
             id
             nf_number
@@ -174,12 +174,28 @@ export async function listEmbalagens(sortDirection = 'DESC') {
             createdAt
             updatedAt
           }
+          nextToken
         }
       }
     `;
 
-    const result = await client.graphql({ query });
-    const items = result.data.listEmbalagems.items;
+    let nextToken = null;
+    const items = [];
+
+    do {
+      const result = await client.graphql({
+        query,
+        variables: {
+          limit: 1000,
+          nextToken
+        }
+      });
+
+      const page = result.data?.listEmbalagems;
+      const pageItems = page?.items || [];
+      items.push(...pageItems);
+      nextToken = page?.nextToken || null;
+    } while (nextToken);
 
     // Ordenar por createdAt (DESC ou ASC)
     return items.sort((a, b) => {
@@ -196,8 +212,8 @@ export async function listEmbalagens(sortDirection = 'DESC') {
 export async function filterEmbalagens(filter) {
   try {
     const query = /* GraphQL */ `
-      query ListEmbalagems($filter: ModelEmbalagemFilterInput) {
-        listEmbalagems(filter: $filter) {
+      query ListEmbalagems($filter: ModelEmbalagemFilterInput, $limit: Int, $nextToken: String) {
+        listEmbalagems(filter: $filter, limit: $limit, nextToken: $nextToken) {
           items {
             id
             nf_number
@@ -224,15 +240,31 @@ export async function filterEmbalagens(filter) {
             createdAt
             updatedAt
           }
+          nextToken
         }
       }
     `;
 
-    const result = await client.graphql({
-      query,
-      variables: { filter }
-    });
-    return result.data.listEmbalagems.items;
+    let nextToken = null;
+    const items = [];
+
+    do {
+      const result = await client.graphql({
+        query,
+        variables: {
+          filter,
+          limit: 1000,
+          nextToken
+        }
+      });
+
+      const page = result.data?.listEmbalagems;
+      const pageItems = page?.items || [];
+      items.push(...pageItems);
+      nextToken = page?.nextToken || null;
+    } while (nextToken);
+
+    return items;
   } catch (error) {
     console.error('Erro ao filtrar embalagens:', error);
     throw error;
