@@ -52,7 +52,7 @@
       "function": {
         "danfeTextract": {
           "deploymentBucketName": "amplify-testesite-prod-87346-deployment",
-          "s3Key": "amplify-builds/danfeTextract-7150334c766b386d3158-build.zip"
+          "s3Key": "amplify-builds/danfeTextract-58344f71755957425a43-build.zip"
         },
         "packflowstorage": {},
         "LambdaTeste": {

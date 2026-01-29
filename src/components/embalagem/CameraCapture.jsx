@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { Camera, SwitchCamera, ZoomIn, ZoomOut, Check, Loader2 } from 'lucide-react'
+import { Camera, SwitchCamera, ZoomIn, ZoomOut, Check, Loader2, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 
 const CAMERA_PREFERENCE_KEY = 'packflow_preferred_camera'
 
-export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isProcessing = false }) {
+export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onBack, isProcessing = false }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -16,6 +16,7 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isP
   const [maxZoom, setMaxZoom] = useState(1)
   const [isCapturing, setIsCapturing] = useState(false)
   const [capturedImage, setCapturedImage] = useState(null)
+  const [capturedFile, setCapturedFile] = useState(null)
   const [error, setError] = useState(null)
   const [cameraReady, setCameraReady] = useState(false)
 
@@ -178,14 +179,10 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isP
       const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95)
       setCapturedImage(imageDataUrl)
 
-      // Converter para File
+      // Converter para File (confirmado depois)
       const blob = await (await fetch(imageDataUrl)).blob()
       const file = new File([blob], `foto_etapa_${etapa}_${Date.now()}.jpg`, { type: 'image/jpeg' })
-
-      // Callback com o arquivo
-      if (onCapture) {
-        onCapture(file, imageDataUrl)
-      }
+      setCapturedFile(file)
     } catch (err) {
       console.error('Erro ao capturar foto:', err)
       setError('Erro ao capturar foto')
@@ -196,6 +193,12 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isP
 
   const retakePhoto = () => {
     setCapturedImage(null)
+    setCapturedFile(null)
+  }
+
+  const confirmPhoto = () => {
+    if (!capturedFile || !onCapture) return
+    onCapture(capturedFile, capturedImage)
   }
 
   return (
@@ -210,8 +213,20 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isP
               {subtitulo && <p className="text-sm opacity-90">{subtitulo}</p>}
             </div>
           </div>
-          <div className="text-sm font-medium">
-            Etapa {etapa}/3
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {onBack && etapa > 1 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onBack}
+                className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                disabled={isProcessing || isCapturing}
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </Button>
+            )}
+            <span>Etapa {etapa}/3</span>
           </div>
         </div>
 
@@ -350,6 +365,8 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, isP
                 variant="success"
                 size="lg"
                 className="bg-emerald-600 hover:bg-emerald-700"
+                onClick={confirmPhoto}
+                disabled={!capturedFile || isCapturing}
               >
                 <Check className="w-5 h-5 mr-2" />
                 Confirmar

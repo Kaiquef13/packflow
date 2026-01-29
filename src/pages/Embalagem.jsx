@@ -309,6 +309,31 @@ export default function Embalagem() {
     ocrJobIdRef.current = 0
   }
 
+  const voltarParaEtapa1 = () => {
+    setEtapa(1)
+    setStartTime(null)
+    setNfNumber('')
+    setClienteNome('')
+    setFotoDanfeKey('')
+    setFotoConteudoKey('')
+    setFotoCaixaKey('')
+    setShowModalDuplicidade(false)
+    setEmbalagemOriginal(null)
+    setIsDuplicada(false)
+    setIsProcessing(false)
+    setIsOcrRunning(false)
+    setOcrError(null)
+    setDuplicidadeAutoResumo(null)
+    setIsRegistrandoDuplicidade(false)
+    ocrJobIdRef.current = 0
+  }
+
+  const voltarParaEtapa2 = () => {
+    setEtapa(2)
+    setFotoCaixaKey('')
+    setIsProcessing(false)
+  }
+
   const handleResumoConfirmado = () => {
     setShowModalFinalizacao(false)
     setUltimoResumo(null)
@@ -396,6 +421,7 @@ export default function Embalagem() {
           titulo="FOTO DOS PRODUTOS"
           subtitulo="Tire uma foto dos itens antes de embalar"
           onCapture={handleCaptureEtapa2}
+          onBack={voltarParaEtapa1}
           isProcessing={isProcessing}
         />
       )}
@@ -406,6 +432,7 @@ export default function Embalagem() {
           titulo="FOTO DA CAIXA FECHADA"
           subtitulo="Tire uma foto da embalagem pronta"
           onCapture={handleCaptureEtapa3}
+          onBack={voltarParaEtapa2}
           isProcessing={isProcessing}
         />
       )}
