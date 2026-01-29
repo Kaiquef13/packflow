@@ -35,6 +35,7 @@ const normalizeEvent = (event) => {
 
 const NF_PATTERNS = [
   /\bNF(?:-?E)?\b[^\d]{0,10}([\d.,]{3,20})/,
+  /\bNFE\b[^\d]{0,10}([\d.,]{3,20})/,
   /\bN[º°]?\s*NF(?:-?E)?\b[^\d]{0,10}([\d.,]{3,20})/,
   /\bN[ÚU]MERO\s+DA\s+NF(?:-?E)?\b[^\d]{0,10}([\d.,]{3,20})/,
   /\bNOTA\s+FISCAL(?:\s+ELETRONICA|\s+ELETRÔNICA)?\b[^\d]{0,10}([\d.,]{3,20})/,
@@ -46,15 +47,50 @@ const NF_PATTERNS = [
 
 
 const CLIENTE_KEYWORD_PRIORITIES = [
-  ['DESTINATARIO', 'DESTINAT\u00c1RIO', 'CLIENTE', 'COMPRADOR', 'CONSUMIDOR'],
+  ['DESTINATARIO', 'DESTINAT\u00c1RIO', 'CLIENTE', 'COMPRADOR', 'CONSUMIDOR', 'NOME DO DESTINATARIO', 'NOME DO DESTINAT\u00c1RIO'],
   ['TOMADOR'],
   ['REMETENTE', 'EMITENTE']
 ];
 
 const CLIENTE_LINE_PATTERNS = [
-  /(DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR)[\s:.-]+([A-Z0-9\s]+)/,
-  /(TOMADOR)[\s:.-]+([A-Z0-9\s]+)/,
-  /(REMETENTE|EMITENTE)[\s:.-]+([A-Z0-9\s]+)/
+  /(NOME\s+DO\s+DESTINAT(?:ARIO|\u00c1RIO)|DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR)[\s:.-]+([A-Z0-9\s&'.-]+)/,
+  /(TOMADOR)[\s:.-]+([A-Z0-9\s&'.-]+)/,
+  /(REMETENTE|EMITENTE)[\s:.-]+([A-Z0-9\s&'.-]+)/,
+  /(NOME)[\s:.-]+([A-Z0-9\s&'.-]+)/
+];
+
+const CLIENTE_KEYWORD_ONLY_PATTERNS = [
+  /^(NOME\s+DO\s+DESTINAT(?:ARIO|\u00c1RIO)|DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR|TOMADOR|REMETENTE|EMITENTE|NOME)[\s:.-]*$/
+];
+
+const CLIENTE_IGNORE_TOKENS = [
+  'CPF',
+  'CNPJ',
+  'CEP',
+  'ENDERECO',
+  'ENDEREÇO',
+  'RUA',
+  'AVENIDA',
+  'AV',
+  'BAIRRO',
+  'CIDADE',
+  'UF',
+  'ESTADO',
+  'PAIS',
+  'PAÍS',
+  'TELEFONE',
+  'FONE',
+  'EMAIL',
+  'E-MAIL',
+  'PEDIDO',
+  'CHAVE',
+  'NOTA',
+  'NF',
+  'VOLUME',
+  'VOLUMES',
+  'PESO',
+  'DATA',
+  'HORA'
 ];
 
 const cleanNFValue = (value) => {
@@ -71,6 +107,37 @@ const cleanNFValue = (value) => {
   }
 
   return '';
+};
+
+const cleanClienteValue = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  let sanitized = value.replace(/\s+/g, ' ').trim();
+
+  for (const token of CLIENTE_IGNORE_TOKENS) {
+    const tokenIndex = sanitized.indexOf(` ${token}`);
+    if (tokenIndex > 0) {
+      sanitized = sanitized.slice(0, tokenIndex).trim();
+    }
+  }
+
+  sanitized = sanitized.replace(/^[^A-Z0-9]+/g, '').replace(/[^A-Z0-9]+$/g, '').trim();
+
+  if (sanitized.length < 3) {
+    return '';
+  }
+
+  if (!/[A-Z]/.test(sanitized)) {
+    return '';
+  }
+
+  if (/^(?:CPF|CNPJ|CEP|ENDERECO|ENDEREÇO|RUA|AVENIDA|AV)\b/.test(sanitized)) {
+    return '';
+  }
+
+  return sanitized;
 };
 
 const deriveNfFromChave = (chaveAcesso) => {
@@ -110,6 +177,30 @@ const collectAccessKeyDigits = (lines, startIndex) => {
   return digits.length >= 44 ? digits.slice(0, 44) : '';
 };
 
+const extractNfFromKeywordContext = (lines, lineIndex) => {
+  const current = lines[lineIndex];
+  const inlineDigits = current.replace(/\D/g, '');
+  const inlineCleaned = cleanNFValue(inlineDigits);
+  if (inlineCleaned) {
+    return inlineCleaned;
+  }
+
+  const maxLookahead = Math.min(lines.length - 1, lineIndex + 3);
+  for (let i = lineIndex + 1; i <= maxLookahead; i += 1) {
+    const line = lines[i];
+    if (/CHAVE/.test(line)) {
+      continue;
+    }
+    const lineDigits = line.replace(/\D/g, '');
+    const cleaned = cleanNFValue(lineDigits);
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+
+  return '';
+};
+
 const extractNFData = (lines) => {
   let nfNumber = '';
   let chaveAcesso = '';
@@ -146,6 +237,13 @@ const extractNFData = (lines) => {
           }
         }
       }
+
+      if (!nfNumber && (/\bNF(?:-?E)?\b/.test(line) || line.includes('NOTA FISCAL'))) {
+        const keywordExtracted = extractNfFromKeywordContext(lines, i);
+        if (keywordExtracted) {
+          nfNumber = keywordExtracted;
+        }
+      }
     }
 
     if (nfNumber && chaveAcesso) {
@@ -165,10 +263,29 @@ const extractClienteFromLines = (lines) => {
     for (const raw of lines) {
       const match = raw.match(pattern);
       if (match) {
-        return match[2].trim();
+        const cleaned = cleanClienteValue(match[2]);
+        if (cleaned) {
+          return cleaned;
+        }
       }
     }
   }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    if (!CLIENTE_KEYWORD_ONLY_PATTERNS.some((pattern) => pattern.test(raw))) {
+      continue;
+    }
+
+    const maxLookahead = Math.min(lines.length - 1, i + 2);
+    for (let j = i + 1; j <= maxLookahead; j += 1) {
+      const candidate = cleanClienteValue(lines[j]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
   return '';
 };
 
@@ -335,7 +452,10 @@ exports.handler = async (event) => {
 
     const { Blocks = [] } = await textract.send(command);
     const blocksMap = buildBlocksIndex(Blocks);
-    const lines = Blocks.filter((b) => b.BlockType === 'LINE' && b.Text).map((b) => b.Text.toUpperCase());
+    const lines = Blocks
+      .filter((b) => b.BlockType === 'LINE' && b.Text)
+      .map((b) => b.Text.toUpperCase().replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
     const fullText = lines.join('\n');
 
     const { nfNumber, chaveAcesso } = extractNFData(lines);
