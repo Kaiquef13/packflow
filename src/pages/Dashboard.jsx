@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Download, Trophy, Users, RefreshCw, Search, Eye } from 'lucide-react'
+import { LayoutDashboard, Download, Trophy, Users, RefreshCw, Search, Eye, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useEmbalagens } from '@/hooks/useEmbalagens'
 import ResumoCards from '@/components/dashboard/ResumoCards'
@@ -10,10 +11,73 @@ import ModalDetalhes from '@/components/dashboard/ModalDetalhes'
 import { formatDateTime, formatTime } from '@/lib/utils'
 import { format } from 'date-fns'
 
+const INITIAL_FILTERS = {
+  periodo: 'todas',
+  status: 'todos',
+  operador: 'todos',
+  ocorrencia: 'todas',
+  dataInicio: '',
+  dataFim: '',
+}
+
+function getDayBounds(dateValue) {
+  const date = new Date(dateValue)
+  const start = new Date(date)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(date)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
+
+function matchesPeriodo(dateValue, periodo, dataInicio, dataFim) {
+  const embalagemDate = new Date(dateValue)
+  const now = new Date()
+
+  if (periodo === 'hoje') {
+    return embalagemDate.toDateString() === now.toDateString()
+  }
+
+  if (periodo === 'semana') {
+    const semanaAtras = new Date(now)
+    semanaAtras.setDate(semanaAtras.getDate() - 7)
+    return embalagemDate >= semanaAtras
+  }
+
+  if (periodo === 'mes') {
+    const mesAtras = new Date(now)
+    mesAtras.setDate(mesAtras.getDate() - 30)
+    return embalagemDate >= mesAtras
+  }
+
+  if (periodo === 'personalizado') {
+    if (dataInicio) {
+      const { start } = getDayBounds(dataInicio)
+      if (embalagemDate < start) return false
+    }
+
+    if (dataFim) {
+      const { end } = getDayBounds(dataFim)
+      if (embalagemDate > end) return false
+    }
+  }
+
+  return true
+}
+
+function matchesOcorrencia(embalagem, ocorrencia) {
+  if (ocorrencia === 'avaria') return Boolean(embalagem.tem_avaria)
+  if (ocorrencia === 'duplicada') return Boolean(embalagem.is_duplicada)
+  if (ocorrencia === 'pendente') return Boolean(embalagem.pendente_extracao)
+  if (ocorrencia === 'suspeita') return embalagem.status === 'SUSPEITA'
+  if (ocorrencia === 'cancelada') return embalagem.status === 'CANCELADA'
+  if (ocorrencia === 'sem_nf') return !embalagem.nf_number
+  return true
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { data: embalagens = [], isLoading, refetch } = useEmbalagens()
-  const [filtro, setFiltro] = useState('todas')
+  const [filtros, setFiltros] = useState(INITIAL_FILTERS)
   const [busca, setBusca] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [embalagemSelecionada, setEmbalagemSelecionada] = useState(null)
@@ -48,28 +112,77 @@ export default function Dashboard() {
     a.click()
   }
 
+  const operadores = [...new Set(
+    embalagens
+      .map((embalagem) => embalagem.operador_nome)
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b))
+
   const embalagensFiltradas = embalagens.filter(e => {
-    if (filtro === 'hoje') {
-      const hoje = new Date().toDateString()
-      const dataEmbalagem = new Date(e.createdAt).toDateString()
-      if (hoje !== dataEmbalagem) return false
-    } else if (filtro === 'semana') {
-      const semanaAtras = new Date()
-      semanaAtras.setDate(semanaAtras.getDate() - 7)
-      if (new Date(e.createdAt) < semanaAtras) return false
+    if (!matchesPeriodo(e.createdAt, filtros.periodo, filtros.dataInicio, filtros.dataFim)) {
+      return false
+    }
+
+    if (filtros.status !== 'todos' && e.status !== filtros.status) {
+      return false
+    }
+
+    if (filtros.operador !== 'todos' && e.operador_nome !== filtros.operador) {
+      return false
+    }
+
+    if (!matchesOcorrencia(e, filtros.ocorrencia)) {
+      return false
     }
 
     if (busca) {
       const termo = busca.toLowerCase()
-      return (
+      const matchBusca = (
         (e.nf_number && e.nf_number.toLowerCase().includes(termo)) ||
         (e.cliente_nome && e.cliente_nome.toLowerCase().includes(termo)) ||
-        (e.operador_nome && e.operador_nome.toLowerCase().includes(termo))
+        (e.operador_nome && e.operador_nome.toLowerCase().includes(termo)) ||
+        (e.observacao && e.observacao.toLowerCase().includes(termo))
       )
+
+      if (!matchBusca) {
+        return false
+      }
     }
 
     return true
   })
+
+  const filtrosAtivos = [
+    filtros.periodo !== 'todas',
+    filtros.status !== 'todos',
+    filtros.operador !== 'todos',
+    filtros.ocorrencia !== 'todas',
+    Boolean(filtros.dataInicio),
+    Boolean(filtros.dataFim),
+    Boolean(busca.trim())
+  ].filter(Boolean).length
+
+  const atualizarFiltro = (campo, valor) => {
+    setFiltros((prev) => {
+      const next = { ...prev, [campo]: valor }
+
+      if (campo === 'periodo' && valor !== 'personalizado') {
+        next.dataInicio = ''
+        next.dataFim = ''
+      }
+
+      if ((campo === 'dataInicio' || campo === 'dataFim') && valor) {
+        next.periodo = 'personalizado'
+      }
+
+      return next
+    })
+  }
+
+  const limparFiltros = () => {
+    setFiltros(INITIAL_FILTERS)
+    setBusca('')
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -119,27 +232,74 @@ export default function Dashboard() {
 
         <div className="bg-white rounded-lg shadow p-4 mb-6">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant={filtro === 'todas' ? 'default' : 'outline'} onClick={() => setFiltro('todas')}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant={filtros.periodo === 'todas' ? 'default' : 'outline'} onClick={() => atualizarFiltro('periodo', 'todas')}>
                 Todas
               </Button>
-              <Button size="sm" variant={filtro === 'hoje' ? 'default' : 'outline'} onClick={() => setFiltro('hoje')}>
+              <Button size="sm" variant={filtros.periodo === 'hoje' ? 'default' : 'outline'} onClick={() => atualizarFiltro('periodo', 'hoje')}>
                 Hoje
               </Button>
-              <Button size="sm" variant={filtro === 'semana' ? 'default' : 'outline'} onClick={() => setFiltro('semana')}>
+              <Button size="sm" variant={filtros.periodo === 'semana' ? 'default' : 'outline'} onClick={() => atualizarFiltro('periodo', 'semana')}>
                 Ultima Semana
               </Button>
+              <Button size="sm" variant={filtros.periodo === 'mes' ? 'default' : 'outline'} onClick={() => atualizarFiltro('periodo', 'mes')}>
+                Ultimos 30 dias
+              </Button>
+              <Button size="sm" variant={filtros.periodo === 'personalizado' ? 'default' : 'outline'} onClick={() => atualizarFiltro('periodo', 'personalizado')}>
+                Periodo customizado
+              </Button>
+              <Button size="sm" variant="ghost" onClick={limparFiltros} className="text-gray-600">
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Limpar filtros
+              </Button>
             </div>
-            <div className="w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <Input
-                  placeholder="Buscar por NF, cliente ou operador..."
+                  placeholder="Buscar por NF, cliente, operador ou observacao..."
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                   className="pl-10"
                 />
               </div>
+              <Select value={filtros.status} onChange={(e) => atualizarFiltro('status', e.target.value)}>
+                <option value="todos">Todos os status</option>
+                <option value="CONCLUIDA">Concluida</option>
+                <option value="SUSPEITA">Suspeita</option>
+                <option value="CANCELADA">Cancelada</option>
+              </Select>
+              <Select value={filtros.operador} onChange={(e) => atualizarFiltro('operador', e.target.value)}>
+                <option value="todos">Todos os operadores</option>
+                {operadores.map((operador) => (
+                  <option key={operador} value={operador}>{operador}</option>
+                ))}
+              </Select>
+              <Select value={filtros.ocorrencia} onChange={(e) => atualizarFiltro('ocorrencia', e.target.value)}>
+                <option value="todas">Todas as ocorrencias</option>
+                <option value="avaria">Com avaria</option>
+                <option value="duplicada">Duplicadas</option>
+                <option value="pendente">Pendentes OCR</option>
+                <option value="suspeita">Somente suspeitas</option>
+                <option value="cancelada">Somente canceladas</option>
+                <option value="sem_nf">Sem NF</option>
+              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={filtros.dataInicio}
+                  onChange={(e) => atualizarFiltro('dataInicio', e.target.value)}
+                />
+                <Input
+                  type="date"
+                  value={filtros.dataFim}
+                  onChange={(e) => atualizarFiltro('dataFim', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+              <span>{embalagensFiltradas.length} embalagens encontradas</span>
+              <span>{filtrosAtivos} filtros ativos</span>
             </div>
           </div>
         </div>
