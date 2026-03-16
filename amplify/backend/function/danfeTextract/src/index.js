@@ -15,6 +15,8 @@ const comprehend = new ComprehendClient({
   region: process.env.COMPREHEND_REGION || process.env.REGION || 'sa-east-1'
 });
 const comprehendLanguage = process.env.COMPREHEND_LANGUAGE || 'pt';
+const TEXTRACT_DETECT_TEXT_COST_USD = 0.0015;
+const TEXTRACT_FORMS_COST_USD = 0.05;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,19 +50,16 @@ const NF_PATTERNS = [
 
 const CLIENTE_KEYWORD_PRIORITIES = [
   ['DESTINATARIO', 'DESTINAT\u00c1RIO', 'CLIENTE', 'COMPRADOR', 'CONSUMIDOR', 'NOME DO DESTINATARIO', 'NOME DO DESTINAT\u00c1RIO'],
-  ['TOMADOR'],
-  ['REMETENTE', 'EMITENTE']
+  ['TOMADOR']
 ];
 
 const CLIENTE_LINE_PATTERNS = [
   /(NOME\s+DO\s+DESTINAT(?:ARIO|\u00c1RIO)|DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR)[\s:.-]+([A-Z0-9\s&'.-]+)/,
-  /(TOMADOR)[\s:.-]+([A-Z0-9\s&'.-]+)/,
-  /(REMETENTE|EMITENTE)[\s:.-]+([A-Z0-9\s&'.-]+)/,
-  /(NOME)[\s:.-]+([A-Z0-9\s&'.-]+)/
+  /(TOMADOR)[\s:.-]+([A-Z0-9\s&'.-]+)/
 ];
 
 const CLIENTE_KEYWORD_ONLY_PATTERNS = [
-  /^(NOME\s+DO\s+DESTINAT(?:ARIO|\u00c1RIO)|DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR|TOMADOR|REMETENTE|EMITENTE|NOME)[\s:.-]*$/
+  /^(NOME\s+DO\s+DESTINAT(?:ARIO|\u00c1RIO)|DESTINAT(?:ARIO|\u00c1RIO)|CLIENTE|COMPRADOR|CONSUMIDOR|TOMADOR)[\s:.-]*$/
 ];
 
 const CLIENTE_IGNORE_TOKENS = [
@@ -582,6 +581,49 @@ const extractNormalizedLines = (blocks) => {
     .filter(Boolean);
 };
 
+const emitOcrUsageLog = ({
+  key,
+  nfNumber,
+  clienteNome,
+  clienteSource,
+  usedForms,
+  usedComprehend,
+  formsReason,
+  estimatedTextractCostUsd
+}) => {
+  const mode = usedForms ? 'forms_fallback' : 'detect_text_only';
+  const metricLog = {
+    _aws: {
+      Timestamp: Date.now(),
+      CloudWatchMetrics: [
+        {
+          Namespace: 'PackFlow/OCR',
+          Dimensions: [['Function', 'Mode', 'UsedForms']],
+          Metrics: [
+            { Name: 'Requests', Unit: 'Count' },
+            { Name: 'EstimatedTextractCostUSD', Unit: 'None' },
+            { Name: 'FormsFallbackRequests', Unit: 'Count' }
+          ]
+        }
+      ]
+    },
+    Function: process.env.AWS_LAMBDA_FUNCTION_NAME || 'danfeTextract',
+    Mode: mode,
+    UsedForms: usedForms ? 'yes' : 'no',
+    Requests: 1,
+    EstimatedTextractCostUSD: Number(estimatedTextractCostUsd.toFixed(4)),
+    FormsFallbackRequests: usedForms ? 1 : 0,
+    OcrKey: key,
+    FoundNF: nfNumber ? 'yes' : 'no',
+    FoundCliente: clienteNome ? 'yes' : 'no',
+    ClienteSource: clienteSource || 'none',
+    UsedComprehend: usedComprehend ? 'yes' : 'no',
+    FormsReason: formsReason || 'not_needed'
+  };
+
+  console.log(JSON.stringify(metricLog));
+};
+
 exports.handler = async (event) => {
   try {
     const payload = normalizeEvent(event);
@@ -615,11 +657,19 @@ exports.handler = async (event) => {
     let clienteKeyValue = null;
     let clienteFromLines = extractClienteFromLines(lines);
     let clienteFromComprehend = null;
+    let usedForms = false;
+    let formsReason = null;
 
     // Use o OCR simples primeiro; o modo FORMS é bem mais caro e so entra quando necessario.
     const shouldRunForms = !clienteFromLines || !nfNumber;
+    if (!clienteFromLines) {
+      formsReason = 'missing_cliente';
+    } else if (!nfNumber) {
+      formsReason = 'missing_nf';
+    }
 
     if (shouldRunForms) {
+      usedForms = true;
       const analyzeCommand = new AnalyzeDocumentCommand({
         FeatureTypes: ['FORMS'],
         Document: {
@@ -655,6 +705,18 @@ exports.handler = async (event) => {
     const clienteData = clienteCandidates[0] || null;
 
     const clienteNome = clienteData?.value || '';
+    const estimatedTextractCostUsd = TEXTRACT_DETECT_TEXT_COST_USD + (usedForms ? TEXTRACT_FORMS_COST_USD : 0);
+
+    emitOcrUsageLog({
+      key,
+      nfNumber,
+      clienteNome,
+      clienteSource: clienteData?.source || null,
+      usedForms,
+      usedComprehend: Boolean(clienteFromComprehend),
+      formsReason,
+      estimatedTextractCostUsd
+    });
 
     return {
       statusCode: 200,
