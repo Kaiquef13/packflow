@@ -4,7 +4,7 @@
 	STORAGE_PACKFLOWSTORAGE_BUCKETNAME
 Amplify Params - DO NOT EDIT */
 
-const { TextractClient, AnalyzeDocumentCommand } = require('@aws-sdk/client-textract');
+const { TextractClient, AnalyzeDocumentCommand, DetectDocumentTextCommand } = require('@aws-sdk/client-textract');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { ComprehendClient, DetectEntitiesCommand } = require('@aws-sdk/client-comprehend');
 
@@ -575,6 +575,13 @@ const collectClienteCandidatesFromRawLines = (lines) => {
     .slice(0, 5);
 };
 
+const extractNormalizedLines = (blocks) => {
+  return blocks
+    .filter((block) => block.BlockType === 'LINE' && block.Text)
+    .map((block) => block.Text.toUpperCase().replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+};
+
 exports.handler = async (event) => {
   try {
     const payload = normalizeEvent(event);
@@ -592,25 +599,45 @@ exports.handler = async (event) => {
     const { Body } = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
     const documentBytes = await streamToBuffer(Body);
 
-    const command = new AnalyzeDocumentCommand({
-      FeatureTypes: ['FORMS'],
+    const detectTextCommand = new DetectDocumentTextCommand({
       Document: {
         Bytes: documentBytes
       }
     });
 
-    const { Blocks = [] } = await textract.send(command);
-    const blocksMap = buildBlocksIndex(Blocks);
-    const lines = Blocks
-      .filter((b) => b.BlockType === 'LINE' && b.Text)
-      .map((b) => b.Text.toUpperCase().replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-    const fullText = lines.join('\n');
+    const { Blocks: detectBlocks = [] } = await textract.send(detectTextCommand);
+    let blocks = detectBlocks;
+    let blocksMap = buildBlocksIndex(blocks);
+    let lines = extractNormalizedLines(blocks);
+    let fullText = lines.join('\n');
 
-    const { nfNumber, chaveAcesso } = extractNFData(lines);
-    const clienteKeyValue = extractClienteFromKeyValue(Blocks, blocksMap);
-    const clienteFromLines = extractClienteFromLines(lines);
+    let { nfNumber, chaveAcesso } = extractNFData(lines);
+    let clienteKeyValue = null;
+    let clienteFromLines = extractClienteFromLines(lines);
     let clienteFromComprehend = null;
+
+    // Use o OCR simples primeiro; o modo FORMS é bem mais caro e so entra quando necessario.
+    const shouldRunForms = !clienteFromLines || !nfNumber;
+
+    if (shouldRunForms) {
+      const analyzeCommand = new AnalyzeDocumentCommand({
+        FeatureTypes: ['FORMS'],
+        Document: {
+          Bytes: documentBytes
+        }
+      });
+
+      const { Blocks: analyzeBlocks = [] } = await textract.send(analyzeCommand);
+      if (analyzeBlocks.length > 0) {
+        blocks = analyzeBlocks;
+        blocksMap = buildBlocksIndex(blocks);
+        lines = extractNormalizedLines(blocks);
+        fullText = lines.join('\n');
+        ({ nfNumber, chaveAcesso } = extractNFData(lines));
+        clienteKeyValue = extractClienteFromKeyValue(blocks, blocksMap);
+        clienteFromLines = clienteFromLines || extractClienteFromLines(lines);
+      }
+    }
 
     if (!clienteKeyValue && !clienteFromLines) {
       clienteFromComprehend = await extractClienteWithComprehend(fullText);
