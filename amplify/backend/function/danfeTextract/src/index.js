@@ -67,11 +67,22 @@ const CLIENTE_IGNORE_TOKENS = [
   'CPF',
   'CNPJ',
   'CEP',
+  'IE',
+  'RG',
   'ENDERECO',
   'ENDEREÇO',
+  'LOGRADOURO',
   'RUA',
+  'RODOVIA',
   'AVENIDA',
   'AV',
+  'ALAMEDA',
+  'TRAVESSA',
+  'TV',
+  'NUMERO',
+  'NÚMERO',
+  'NUM',
+  'COMPLEMENTO',
   'BAIRRO',
   'CIDADE',
   'UF',
@@ -80,9 +91,13 @@ const CLIENTE_IGNORE_TOKENS = [
   'PAÍS',
   'TELEFONE',
   'FONE',
+  'CELULAR',
   'EMAIL',
   'E-MAIL',
   'PEDIDO',
+  'PEDIDO:',
+  'CODIGO',
+  'CÓDIGO',
   'CHAVE',
   'NOTA',
   'NF',
@@ -90,7 +105,45 @@ const CLIENTE_IGNORE_TOKENS = [
   'VOLUMES',
   'PESO',
   'DATA',
-  'HORA'
+  'HORA',
+  'TRANSPORTADORA',
+  'RAZAO SOCIAL',
+  'RAZÃO SOCIAL'
+];
+
+const ADDRESS_KEYWORDS = [
+  'ENDERECO',
+  'ENDEREÇO',
+  'LOGRADOURO',
+  'RUA',
+  'AVENIDA',
+  'AV ',
+  'AV.',
+  'RODOVIA',
+  'ALAMEDA',
+  'TRAVESSA',
+  'BAIRRO',
+  'COMPLEMENTO',
+  'NUMERO',
+  'NÚMERO',
+  'CEP',
+  'CIDADE',
+  'UF',
+  'ESTADO',
+  'PAÍS'
+];
+
+const DOCUMENT_KEYWORDS = ['CPF', 'CNPJ', 'RG', 'IE'];
+
+const CLIENTE_STOPWORDS = [
+  'MERCADO LIVRE',
+  'MERCADO ENVIOS',
+  'MERCADO ENVÍOS',
+  'FULL',
+  'SHIPMENT',
+  'ETIQUETA',
+  'DESTINO',
+  'ORIGEM'
 ];
 
 const cleanNFValue = (value) => {
@@ -116,6 +169,10 @@ const cleanClienteValue = (value) => {
 
   let sanitized = value.replace(/\s+/g, ' ').trim();
 
+  sanitized = sanitized
+    .replace(/^\s*(DESTINAT(?:ARIO|ÁRIO)|CLIENTE|COMPRADOR|CONSUMIDOR|NOME(?:\s+DO\s+DESTINAT(?:ARIO|ÁRIO))?)\s*[:.-]?\s*/i, '')
+    .replace(/^\s*(REMETENTE|EMITENTE|TOMADOR)\s*[:.-]?\s*/i, '');
+
   for (const token of CLIENTE_IGNORE_TOKENS) {
     const tokenIndex = sanitized.indexOf(` ${token}`);
     if (tokenIndex > 0) {
@@ -124,6 +181,7 @@ const cleanClienteValue = (value) => {
   }
 
   sanitized = sanitized.replace(/^[\s:.-]+/g, '').replace(/[\s:.-]+$/g, '').trim();
+  sanitized = sanitized.replace(/\s{2,}/g, ' ');
 
   if (sanitized.length < 3) {
     return '';
@@ -138,6 +196,70 @@ const cleanClienteValue = (value) => {
   }
 
   return sanitized;
+};
+
+const countDigits = (value) => (value.match(/\d/g) || []).length;
+
+const isCpfOrCnpjLike = (value) => {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 11 || digits.length === 14;
+};
+
+const isAddressLike = (value) => {
+  const upper = value.toUpperCase();
+
+  if (ADDRESS_KEYWORDS.some((keyword) => upper.includes(keyword))) {
+    return true;
+  }
+
+  return /\b\d{5}-?\d{3}\b/.test(upper) || /\b(?:RUA|AV|AVENIDA|ALAMEDA|TRAVESSA)\b.*\d+/i.test(upper);
+};
+
+const isDocumentLike = (value) => {
+  const upper = value.toUpperCase();
+  return DOCUMENT_KEYWORDS.some((keyword) => upper.includes(keyword)) || isCpfOrCnpjLike(upper);
+};
+
+const isLikelyClienteName = (value) => {
+  if (!value) {
+    return false;
+  }
+
+  const upper = value.toUpperCase();
+  const digits = countDigits(upper);
+  const words = upper.split(/\s+/).filter(Boolean);
+
+  if (isDocumentLike(upper) || isAddressLike(upper)) {
+    return false;
+  }
+
+  if (CLIENTE_STOPWORDS.some((word) => upper.includes(word)) && words.length < 3) {
+    return false;
+  }
+
+  if (digits >= Math.ceil(upper.length * 0.35)) {
+    return false;
+  }
+
+  if (words.length === 1 && upper.length < 5) {
+    return false;
+  }
+
+  return true;
+};
+
+const buildClienteCandidate = ({ value, source, confidence = 0, priorityBoost = 0 }) => {
+  const cleaned = cleanClienteValue(value);
+  if (!cleaned || !isLikelyClienteName(cleaned)) {
+    return null;
+  }
+
+  return {
+    value: cleaned,
+    source,
+    confidence,
+    score: (confidence || 0) + priorityBoost
+  };
 };
 
 const deriveNfFromChave = (chaveAcesso) => {
@@ -259,13 +381,19 @@ const extractNFData = (lines) => {
 };
 
 const extractClienteFromLines = (lines) => {
+  const candidates = [];
+
   for (const pattern of CLIENTE_LINE_PATTERNS) {
     for (const raw of lines) {
       const match = raw.match(pattern);
       if (match) {
-        const cleaned = cleanClienteValue(match[2]);
-        if (cleaned) {
-          return cleaned;
+        const candidate = buildClienteCandidate({
+          value: match[2],
+          source: 'line_regex',
+          priorityBoost: 25
+        });
+        if (candidate) {
+          candidates.push(candidate);
         }
       }
     }
@@ -279,14 +407,19 @@ const extractClienteFromLines = (lines) => {
 
     const maxLookahead = Math.min(lines.length - 1, i + 2);
     for (let j = i + 1; j <= maxLookahead; j += 1) {
-      const candidate = cleanClienteValue(lines[j]);
+      const candidate = buildClienteCandidate({
+        value: lines[j],
+        source: 'line_keyword_lookahead',
+        priorityBoost: 20 - (j - i)
+      });
       if (candidate) {
-        return candidate;
+        candidates.push(candidate);
       }
     }
   }
 
-  return '';
+  candidates.sort((a, b) => b.score - a.score || b.value.length - a.value.length);
+  return candidates[0] || null;
 };
 
 const buildBlocksIndex = (blocks) => {
@@ -353,12 +486,16 @@ const extractClienteFromKeyValue = (blocks, blocksMap) => {
       const valueBlock = blocksMap.get(valueId);
       const valueText = extractTextFromBlock(valueBlock, blocksMap);
       if (valueText) {
-        prioritizedMatches[priority] = {
-          value: valueText.trim(),
+        const candidate = buildClienteCandidate({
+          value: valueText,
           source: 'textract_key_value',
-          confidence: valueBlock?.Confidence || block?.Confidence || 0
-        };
-        break;
+          confidence: valueBlock?.Confidence || block?.Confidence || 0,
+          priorityBoost: 30 - (priority * 5)
+        });
+        if (candidate) {
+          prioritizedMatches[priority] = candidate;
+          break;
+        }
       }
     }
 
@@ -387,11 +524,12 @@ const extractClienteWithComprehend = async (text) => {
       .sort((a, b) => (b.Score || 0) - (a.Score || 0))[0];
 
     if (candidate) {
-      return {
+      return buildClienteCandidate({
         value: candidate.Text.toUpperCase(),
         source: `comprehend_${candidate.Type.toLowerCase()}`,
-        confidence: candidate.Score || 0
-      };
+        confidence: (candidate.Score || 0) * 100,
+        priorityBoost: 0
+      });
     }
   } catch (error) {
     console.warn('Comprehend detectEntities failed', error);
@@ -424,6 +562,17 @@ const streamToBuffer = async (body) => {
     body.on('error', reject);
     body.on('end', () => resolve(Buffer.concat(chunks)));
   });
+};
+
+const collectClienteCandidatesFromRawLines = (lines) => {
+  return lines
+    .map((line, index) => buildClienteCandidate({
+      value: line,
+      source: `line_fallback_${index}`,
+      priorityBoost: Math.max(0, 10 - index)
+    }))
+    .filter(Boolean)
+    .slice(0, 5);
 };
 
 exports.handler = async (event) => {
@@ -460,18 +609,23 @@ exports.handler = async (event) => {
 
     const { nfNumber, chaveAcesso } = extractNFData(lines);
     const clienteKeyValue = extractClienteFromKeyValue(Blocks, blocksMap);
+    const clienteFromLines = extractClienteFromLines(lines);
     let clienteFromComprehend = null;
 
-    if (!clienteKeyValue) {
+    if (!clienteKeyValue && !clienteFromLines) {
       clienteFromComprehend = await extractClienteWithComprehend(fullText);
     }
 
-    const clienteFromLines = extractClienteFromLines(lines);
+    const clienteCandidates = [
+      clienteKeyValue,
+      clienteFromLines,
+      clienteFromComprehend,
+      ...collectClienteCandidatesFromRawLines(lines)
+    ].filter(Boolean);
 
-    const clienteData =
-      clienteKeyValue ||
-      clienteFromComprehend ||
-      (clienteFromLines ? { value: clienteFromLines, source: 'line_regex', confidence: 0 } : null);
+    clienteCandidates.sort((a, b) => b.score - a.score || b.value.length - a.value.length);
+
+    const clienteData = clienteCandidates[0] || null;
 
     const clienteNome = clienteData?.value || '';
 
@@ -486,6 +640,12 @@ exports.handler = async (event) => {
         cliente_nome: clienteNome,
         cliente_source: clienteData?.source || null,
         cliente_confidence: clienteData?.confidence ?? null,
+        cliente_candidates: clienteCandidates.slice(0, 5).map((candidate) => ({
+          value: candidate.value,
+          source: candidate.source,
+          confidence: candidate.confidence,
+          score: candidate.score
+        })),
         lines
       })
     };
