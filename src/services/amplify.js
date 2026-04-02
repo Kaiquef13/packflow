@@ -179,23 +179,12 @@ export async function listEmbalagens(sortDirection = 'DESC') {
       }
     `;
 
-    let nextToken = null;
-    const items = [];
+    const result = await client.graphql({
+      query,
+      variables: { limit: 500 }
+    });
 
-    do {
-      const result = await client.graphql({
-        query,
-        variables: {
-          limit: 1000,
-          nextToken
-        }
-      });
-
-      const page = result.data?.listEmbalagems;
-      const pageItems = page?.items || [];
-      items.push(...pageItems);
-      nextToken = page?.nextToken || null;
-    } while (nextToken);
+    const items = result.data?.listEmbalagems?.items || [];
 
     // Ordenar por createdAt (DESC ou ASC)
     return items.sort((a, b) => {

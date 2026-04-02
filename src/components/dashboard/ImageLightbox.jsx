@@ -28,7 +28,7 @@ export default function ImageLightbox({ fotos, selectedIndex, onClose, onPreviou
     >
       {/* Imagem */}
       <motion.div
-        className="relative max-w-4xl max-h-[90vh]"
+        className="relative"
         onClick={(e) => e.stopPropagation()}
         initial={{ scale: 0.8 }}
         animate={{ scale: 1 }}
@@ -36,7 +36,7 @@ export default function ImageLightbox({ fotos, selectedIndex, onClose, onPreviou
         <img
           src={foto.url}
           alt={foto.titulo}
-          className="w-full h-full object-contain rounded-lg"
+          className="max-w-[90vw] max-h-[85vh] w-auto h-auto object-contain rounded-lg"
         />
 
         {/* Título */}

@@ -5,6 +5,7 @@ export function useEmbalagens(sortDirection = 'DESC') {
   return useQuery({
     queryKey: ['embalagens', sortDirection],
     queryFn: () => amplifyService.listEmbalagens(sortDirection),
+    staleTime: 30_000,
   })
 }
 

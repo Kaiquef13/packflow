@@ -12,7 +12,7 @@ import { formatDateTime, formatTime } from '@/lib/utils'
 import { format } from 'date-fns'
 
 const INITIAL_FILTERS = {
-  periodo: 'todas',
+  periodo: 'hoje',
   status: 'todos',
   operador: 'todos',
   ocorrencia: 'todas',
