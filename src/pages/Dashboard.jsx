@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { useEmbalagens } from '@/hooks/useEmbalagens'
+import { useEmbalagens, useEmbalagensPeriodo } from '@/hooks/useEmbalagens'
 import ResumoCards from '@/components/dashboard/ResumoCards'
 import ModalDetalhes from '@/components/dashboard/ModalDetalhes'
 import { formatDateTime, formatTime } from '@/lib/utils'
@@ -76,7 +76,10 @@ function matchesOcorrencia(embalagem, ocorrencia) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { data: embalagens = [], isLoading, refetch } = useEmbalagens()
+  const [carregarTodos, setCarregarTodos] = useState(false)
+  const limitado = useEmbalagens()
+  const completo = useEmbalagensPeriodo(null, { enabled: carregarTodos })
+  const { data: embalagens = [], isLoading, refetch } = carregarTodos ? completo : limitado
   const [filtros, setFiltros] = useState(INITIAL_FILTERS)
   const [busca, setBusca] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -301,6 +304,14 @@ export default function Dashboard() {
               <span>{embalagensFiltradas.length} embalagens encontradas</span>
               <span>{filtrosAtivos} filtros ativos</span>
             </div>
+            {!carregarTodos && (
+              <div className="flex items-center justify-between gap-2 rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-800">
+                <span>Exibindo os 500 registros mais recentes. Pedidos antigos podem não aparecer.</span>
+                <Button size="sm" variant="outline" className="shrink-0 border-yellow-400 text-yellow-800 hover:bg-yellow-100" onClick={() => setCarregarTodos(true)}>
+                  Carregar todos
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
