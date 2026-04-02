@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Download, Trophy, Users, RefreshCw, Search, Eye, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -74,17 +74,45 @@ function matchesOcorrencia(embalagem, ocorrencia) {
   return true
 }
 
+function getServerFilter(filtros) {
+  const { periodo, dataInicio, dataFim } = filtros
+  if (periodo === 'hoje') {
+    const s = new Date(); s.setHours(0, 0, 0, 0)
+    const e = new Date(); e.setHours(23, 59, 59, 999)
+    return { startDate: s.toISOString(), endDate: e.toISOString() }
+  }
+  if (periodo === 'semana') {
+    const s = new Date(); s.setDate(s.getDate() - 7); s.setHours(0, 0, 0, 0)
+    return { startDate: s.toISOString(), endDate: null }
+  }
+  if (periodo === 'mes') {
+    const s = new Date(); s.setDate(s.getDate() - 30); s.setHours(0, 0, 0, 0)
+    return { startDate: s.toISOString(), endDate: null }
+  }
+  if (periodo === 'personalizado') {
+    const startDate = dataInicio ? new Date(dataInicio + 'T00:00:00').toISOString() : null
+    const endDate = dataFim ? new Date(dataFim + 'T23:59:59').toISOString() : null
+    if (startDate || endDate) return { startDate, endDate }
+  }
+  return null
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [carregarTodos, setCarregarTodos] = useState(false)
-  const limitado = useEmbalagens()
-  const completo = useEmbalagensPeriodo(null, { enabled: carregarTodos })
-  const { data: embalagens = [], isLoading, refetch } = carregarTodos ? completo : limitado
   const [filtros, setFiltros] = useState(INITIAL_FILTERS)
   const [busca, setBusca] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [embalagemSelecionada, setEmbalagemSelecionada] = useState(null)
   const [showDetalhes, setShowDetalhes] = useState(false)
+
+  const serverFilter = useMemo(() => getServerFilter(filtros), [filtros])
+  const limitado = useEmbalagens()
+  const comFiltro = useEmbalagensPeriodo(
+    serverFilter?.startDate ?? null,
+    serverFilter?.endDate ?? null,
+    { enabled: Boolean(serverFilter) }
+  )
+  const { data: embalagens = [], isLoading, refetch } = serverFilter ? comFiltro : limitado
 
   useEffect(() => {
     let interval
@@ -304,12 +332,9 @@ export default function Dashboard() {
               <span>{embalagensFiltradas.length} embalagens encontradas</span>
               <span>{filtrosAtivos} filtros ativos</span>
             </div>
-            {!carregarTodos && (
-              <div className="flex items-center justify-between gap-2 rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-800">
-                <span>Exibindo os 500 registros mais recentes. Pedidos antigos podem não aparecer.</span>
-                <Button size="sm" variant="outline" className="shrink-0 border-yellow-400 text-yellow-800 hover:bg-yellow-100" onClick={() => setCarregarTodos(true)}>
-                  Carregar todos
-                </Button>
+            {!serverFilter && (
+              <div className="rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-800">
+                Exibindo os 500 registros mais recentes. Para buscar registros antigos, use o filtro de período ou datas.
               </div>
             )}
           </div>

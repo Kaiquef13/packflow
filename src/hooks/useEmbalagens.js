@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import amplifyService from '@/services/amplify'
 
-export function useEmbalagensPeriodo(startDate, options = {}) {
+export function useEmbalagensPeriodo(startDate, endDate, options = {}) {
   return useQuery({
-    queryKey: ['embalagens-periodo', startDate],
-    queryFn: () => amplifyService.listEmbalagensPeriodo(startDate),
+    queryKey: ['embalagens-periodo', startDate, endDate],
+    queryFn: () => amplifyService.listEmbalagensPeriodo(startDate, endDate),
     staleTime: 60_000,
     ...options,
   })
