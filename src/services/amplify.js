@@ -143,6 +143,65 @@ export async function deleteOperador(id) {
 
 // ============ EMBALAGENS ============
 
+export async function listEmbalagensPeriodo(startDate) {
+  try {
+    const query = /* GraphQL */ `
+      query ListEmbalagems($filter: ModelEmbalagemFilterInput, $limit: Int, $nextToken: String) {
+        listEmbalagems(filter: $filter, limit: $limit, nextToken: $nextToken) {
+          items {
+            id
+            nf_number
+            cliente_nome
+            start_time
+            end_time
+            tempo_total_segundos
+            foto_danfe_url
+            foto_conteudo_url
+            foto_caixa_url
+            observacao
+            operador_id
+            operador_nome
+            pendente_extracao
+            status
+            tem_avaria
+            tipo_avaria
+            observacao_avaria
+            avaria_registrada_por
+            avaria_registrada_em
+            is_duplicada
+            nf_original_id
+            data_nf_original
+            createdAt
+            updatedAt
+          }
+          nextToken
+        }
+      }
+    `;
+
+    const filter = startDate ? { createdAt: { ge: startDate } } : undefined;
+
+    let nextToken = null;
+    const items = [];
+
+    do {
+      const result = await client.graphql({
+        query,
+        variables: { filter, limit: 1000, nextToken }
+      });
+
+      const page = result.data?.listEmbalagems;
+      items.push(...(page?.items || []));
+      nextToken = page?.nextToken || null;
+    } while (nextToken);
+
+    return items;
+  } catch (error) {
+    console.error('Erro ao listar embalagens por período:', error);
+    throw error;
+  }
+}
+
 export async function listEmbalagens(sortDirection = 'DESC') {
   try {
     const query = /* GraphQL */ `
@@ -483,6 +542,7 @@ const amplifyService = {
 
   // Embalagens
   listEmbalagens,
+  listEmbalagensPeriodo,
   filterEmbalagens,
   createEmbalagem,
   updateEmbalagem,

@@ -3,28 +3,38 @@ import { useNavigate } from 'react-router-dom'
 import { Trophy, ArrowLeft, Package, Zap, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useEmbalagens } from '@/hooks/useEmbalagens'
+import { useEmbalagensPeriodo } from '@/hooks/useEmbalagens'
 import { formatTime } from '@/lib/utils'
 import { motion } from 'framer-motion'
 
+function getStartDate(periodo) {
+  const now = new Date()
+  if (periodo === 'hoje') {
+    const d = new Date(now)
+    d.setHours(0, 0, 0, 0)
+    return d.toISOString()
+  }
+  if (periodo === 'semana') {
+    const d = new Date(now)
+    d.setDate(d.getDate() - 7)
+    d.setHours(0, 0, 0, 0)
+    return d.toISOString()
+  }
+  // total = mês atual
+  const d = new Date(now.getFullYear(), now.getMonth(), 1)
+  return d.toISOString()
+}
+
 export default function Ranking() {
   const navigate = useNavigate()
-  const { data: todasEmbalagens = [] } = useEmbalagens()
   const [periodo, setPeriodo] = useState('total')
   const [turno, setTurno] = useState('todos')
 
+  const startDate = useMemo(() => getStartDate(periodo), [periodo])
+  const { data: todasEmbalagens = [], isLoading } = useEmbalagensPeriodo(startDate)
+
   const embalagensFiltradas = useMemo(() => {
     let filtradas = [...todasEmbalagens]
-
-    // Filtro de período
-    if (periodo === 'hoje') {
-      const hoje = new Date().toDateString()
-      filtradas = filtradas.filter(e => new Date(e.createdAt).toDateString() === hoje)
-    } else if (periodo === 'semana') {
-      const semanaAtras = new Date()
-      semanaAtras.setDate(semanaAtras.getDate() - 7)
-      filtradas = filtradas.filter(e => new Date(e.createdAt) >= semanaAtras)
-    }
 
     // Filtro de turno
     if (turno !== 'todos') {
@@ -38,7 +48,7 @@ export default function Ranking() {
     }
 
     return filtradas
-  }, [todasEmbalagens, periodo, turno])
+  }, [todasEmbalagens, turno])
 
   const rankings = useMemo(() => {
     const stats = {}
@@ -95,6 +105,12 @@ export default function Ranking() {
             Voltar
           </Button>
         </div>
+
+        {isLoading && (
+          <div className="text-center py-4 text-gray-500 text-sm">
+            Carregando dados do período...
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4">
