@@ -75,26 +75,39 @@ function matchesOcorrencia(embalagem, ocorrencia) {
 }
 
 function getServerFilter(filtros) {
-  const { periodo, dataInicio, dataFim } = filtros
+  const { periodo, dataInicio, dataFim, status, operador, ocorrencia } = filtros
+
+  // Filtros de data
+  let startDate = null
+  let endDate = null
   if (periodo === 'hoje') {
     const s = new Date(); s.setHours(0, 0, 0, 0)
     const e = new Date(); e.setHours(23, 59, 59, 999)
-    return { startDate: s.toISOString(), endDate: e.toISOString() }
-  }
-  if (periodo === 'semana') {
+    startDate = s.toISOString(); endDate = e.toISOString()
+  } else if (periodo === 'semana') {
     const s = new Date(); s.setDate(s.getDate() - 7); s.setHours(0, 0, 0, 0)
-    return { startDate: s.toISOString(), endDate: null }
-  }
-  if (periodo === 'mes') {
+    startDate = s.toISOString()
+  } else if (periodo === 'mes') {
     const s = new Date(); s.setDate(s.getDate() - 30); s.setHours(0, 0, 0, 0)
-    return { startDate: s.toISOString(), endDate: null }
+    startDate = s.toISOString()
+  } else if (periodo === 'personalizado') {
+    if (dataInicio) startDate = new Date(dataInicio + 'T00:00:00').toISOString()
+    if (dataFim) endDate = new Date(dataFim + 'T23:59:59').toISOString()
   }
-  if (periodo === 'personalizado') {
-    const startDate = dataInicio ? new Date(dataInicio + 'T00:00:00').toISOString() : null
-    const endDate = dataFim ? new Date(dataFim + 'T23:59:59').toISOString() : null
-    if (startDate || endDate) return { startDate, endDate }
-  }
-  return null
+
+  // Filtros extras para o servidor
+  const extraFilter = {}
+  if (status && status !== 'todos') extraFilter.status = { eq: status }
+  if (operador && operador !== 'todos') extraFilter.operador_nome = { eq: operador }
+  if (ocorrencia === 'avaria') extraFilter.tem_avaria = { eq: true }
+  if (ocorrencia === 'duplicada') extraFilter.is_duplicada = { eq: true }
+  if (ocorrencia === 'pendente') extraFilter.pendente_extracao = { eq: true }
+
+  const hasDate = Boolean(startDate || endDate)
+  const hasExtra = Object.keys(extraFilter).length > 0
+
+  if (!hasDate && !hasExtra) return null
+  return { startDate, endDate, extraFilter }
 }
 
 export default function Dashboard() {
@@ -110,6 +123,7 @@ export default function Dashboard() {
   const comFiltro = useEmbalagensPeriodo(
     serverFilter?.startDate ?? null,
     serverFilter?.endDate ?? null,
+    serverFilter?.extraFilter ?? {},
     { enabled: Boolean(serverFilter) }
   )
   const { data: embalagens = [], isLoading, refetch } = serverFilter ? comFiltro : limitado

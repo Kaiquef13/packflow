@@ -143,7 +143,7 @@ export async function deleteOperador(id) {
 
 // ============ EMBALAGENS ============
 
-export async function listEmbalagensPeriodo(startDate, endDate) {
+export async function listEmbalagensPeriodo(startDate, endDate, extraFilter = {}) {
   try {
     const query = /* GraphQL */ `
       query ListEmbalagems($filter: ModelEmbalagemFilterInput, $limit: Int, $nextToken: String) {
@@ -179,12 +179,14 @@ export async function listEmbalagensPeriodo(startDate, endDate) {
       }
     `;
 
-    let filter = undefined;
-    if (startDate && endDate) {
-      filter = { createdAt: { ge: startDate, le: endDate } };
-    } else if (startDate) {
-      filter = { createdAt: { ge: startDate } };
-    }
+    const dateFilter = startDate && endDate
+      ? { createdAt: { ge: startDate, le: endDate } }
+      : startDate
+        ? { createdAt: { ge: startDate } }
+        : {};
+
+    const combined = { ...dateFilter, ...extraFilter };
+    const filter = Object.keys(combined).length > 0 ? combined : undefined;
 
     let nextToken = null;
     const items = [];

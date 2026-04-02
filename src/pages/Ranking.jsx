@@ -31,7 +31,7 @@ export default function Ranking() {
   const [turno, setTurno] = useState('todos')
 
   const startDate = useMemo(() => getStartDate(periodo), [periodo])
-  const { data: todasEmbalagens = [], isLoading } = useEmbalagensPeriodo(startDate, null)
+  const { data: todasEmbalagens = [], isLoading } = useEmbalagensPeriodo(startDate, null, {})
 
   const embalagensFiltradas = useMemo(() => {
     let filtradas = [...todasEmbalagens]
