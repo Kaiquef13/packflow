@@ -80,7 +80,12 @@ export default function Embalagem() {
 
         const original = embalagens?.find(e => !e.is_duplicada)
 
-        if (original) {
+        const isRecente = original && (() => {
+          const diffDias = (Date.now() - new Date(original.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+          return diffDias <= 30
+        })()
+
+        if (original && isRecente) {
           setEmbalagemOriginal(original)
           setIsDuplicada(true)
           try {
