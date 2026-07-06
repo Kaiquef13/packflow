@@ -3,12 +3,15 @@ import { Card, CardContent } from '@/components/ui/card'
 import { formatTime } from '@/lib/utils'
 
 export default function ResumoCards({ embalagens = [] }) {
-  const totalEmbalagens = embalagens.length
-  const tempoMedio = embalagens.length > 0
-    ? Math.floor(embalagens.reduce((sum, e) => sum + (e.tempo_total_segundos || 0), 0) / embalagens.length)
+  // Embalagens duplicadas são o mesmo pacote fisico escaneado de novo: nao contam como caixa nova
+  const embalagensValidas = embalagens.filter(e => !e.is_duplicada)
+
+  const totalEmbalagens = embalagensValidas.length
+  const tempoMedio = embalagensValidas.length > 0
+    ? Math.floor(embalagensValidas.reduce((sum, e) => sum + (e.tempo_total_segundos || 0), 0) / embalagensValidas.length)
     : 0
-  const operadoresUnicos = new Set(embalagens.map(e => e.operador_id)).size
-  const embalagensSuspeitas = embalagens.filter(e => e.status === 'SUSPEITA' || e.tem_avaria).length
+  const operadoresUnicos = new Set(embalagensValidas.map(e => e.operador_id)).size
+  const embalagensSuspeitas = embalagensValidas.filter(e => e.status === 'SUSPEITA' || e.tem_avaria).length
 
   const cards = [
     {

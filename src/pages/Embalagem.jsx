@@ -5,6 +5,7 @@ import ModalFinalizacao from '@/components/embalagem/ModalFinalizacao'
 import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
+import { useConfiguracao, DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS } from '@/hooks/useConfiguracao'
 import amplifyService from '@/services/amplify'
 
 export default function Embalagem() {
@@ -40,6 +41,8 @@ export default function Embalagem() {
   const extractData = useExtractData()
   const createEmbalagem = useCreateEmbalagem()
   const updateEmbalagem = useUpdateEmbalagem()
+  const { data: configuracao } = useConfiguracao()
+  const tempoMinimoSuspeitaSegundos = configuracao?.tempo_minimo_suspeita_segundos ?? DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS
 
   useEffect(() => {
     const operadorData = localStorage.getItem('packflow_operador')
@@ -196,10 +199,10 @@ export default function Embalagem() {
         Math.floor((endTime - effectiveStart) / 1000)
       )
 
-      const status = tempoTotalSegundos < 60 ? 'SUSPEITA' : 'CONCLUIDA'
+      const status = tempoTotalSegundos < tempoMinimoSuspeitaSegundos ? 'SUSPEITA' : 'CONCLUIDA'
 
       const alertaPrefix = observacao ? `${observacao}\n` : ''
-      const observacaoFinal = tempoTotalSegundos < 60
+      const observacaoFinal = tempoTotalSegundos < tempoMinimoSuspeitaSegundos
         ? `${alertaPrefix}[ALERTA: Tempo suspeito - ${tempoTotalSegundos}s]`.trim()
         : observacao || ''
 

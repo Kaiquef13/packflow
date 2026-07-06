@@ -76,6 +76,20 @@ type Embalagem @model {
 }
 
 # ============================================
+# MODELO: Configuracao
+# ============================================
+type Configuracao @model {
+  id: ID!
+
+  # Tempo mínimo (em segundos) para considerar uma embalagem suspeita
+  tempo_minimo_suspeita_segundos: Int!
+
+  # Timestamps automáticos
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# ============================================
 # ENUMS
 # ============================================
 enum StatusEmbalagem {

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trophy, ArrowLeft, Package, Zap, Star } from 'lucide-react'
+import { Trophy, ArrowLeft, Package, Zap, Star, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useEmbalagensPeriodo } from '@/hooks/useEmbalagens'
@@ -53,7 +53,8 @@ export default function Ranking() {
   const rankings = useMemo(() => {
     const stats = {}
 
-    embalagensFiltradas.forEach(e => {
+    // Embalagens duplicadas sao o mesmo pacote fisico escaneado de novo: nao contam no ranking
+    embalagensFiltradas.filter(e => !e.is_duplicada).forEach(e => {
       if (!stats[e.operador_id]) {
         stats[e.operador_id] = {
           nome: e.operador_nome,
@@ -66,7 +67,7 @@ export default function Ranking() {
 
       stats[e.operador_id].totalEmbalagens++
       stats[e.operador_id].tempoTotal += e.tempo_total_segundos || 0
-      if (e.status === 'suspeito') stats[e.operador_id].suspeitas++
+      if (e.status === 'SUSPEITA') stats[e.operador_id].suspeitas++
       if (e.tem_avaria) stats[e.operador_id].avarias++
     })
 
@@ -100,10 +101,16 @@ export default function Ranking() {
             </h1>
             <p className="text-gray-600 mt-1">Performance e produtividade</p>
           </div>
-          <Button onClick={() => navigate('/dashboard')} variant="outline">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => navigate('/evolucao')} variant="outline">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Evolução
+            </Button>
+            <Button onClick={() => navigate('/dashboard')} variant="outline">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Voltar
+            </Button>
+          </div>
         </div>
 
         {isLoading && (

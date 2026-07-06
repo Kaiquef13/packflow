@@ -393,6 +393,84 @@ export async function updateEmbalagem(id, data) {
   }
 }
 
+// ============ CONFIGURACAO ============
+
+const CONFIGURACAO_ID = 'global'
+const DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS = 60
+
+export async function getConfiguracao() {
+  try {
+    const query = /* GraphQL */ `
+      query GetConfiguracao($id: ID!) {
+        getConfiguracao(id: $id) {
+          id
+          tempo_minimo_suspeita_segundos
+          createdAt
+          updatedAt
+        }
+      }
+    `;
+
+    const result = await client.graphql({
+      query,
+      variables: { id: CONFIGURACAO_ID }
+    });
+    return result.data?.getConfiguracao || null;
+  } catch (error) {
+    console.error('Erro ao buscar configuração:', error);
+    throw error;
+  }
+}
+
+export async function upsertConfiguracao(data) {
+  try {
+    const existente = await getConfiguracao();
+
+    if (existente) {
+      const mutation = /* GraphQL */ `
+        mutation UpdateConfiguracao($input: UpdateConfiguracaoInput!) {
+          updateConfiguracao(input: $input) {
+            id
+            tempo_minimo_suspeita_segundos
+            updatedAt
+          }
+        }
+      `;
+
+      const result = await client.graphql({
+        query: mutation,
+        variables: { input: { id: CONFIGURACAO_ID, ...data } }
+      });
+      return result.data.updateConfiguracao;
+    }
+
+    const mutation = /* GraphQL */ `
+      mutation CreateConfiguracao($input: CreateConfiguracaoInput!) {
+        createConfiguracao(input: $input) {
+          id
+          tempo_minimo_suspeita_segundos
+          updatedAt
+        }
+      }
+    `;
+
+    const result = await client.graphql({
+      query: mutation,
+      variables: {
+        input: {
+          id: CONFIGURACAO_ID,
+          tempo_minimo_suspeita_segundos: DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS,
+          ...data
+        }
+      }
+    });
+    return result.data.createConfiguracao;
+  } catch (error) {
+    console.error('Erro ao salvar configuração:', error);
+    throw error;
+  }
+}
+
 // ============ STORAGE (S3) ============
 
 export async function uploadFile(file) {
@@ -553,6 +631,10 @@ const amplifyService = {
   filterEmbalagens,
   createEmbalagem,
   updateEmbalagem,
+
+  // Configuracao
+  getConfiguracao,
+  upsertConfiguracao,
 
   // Storage
   uploadFile,

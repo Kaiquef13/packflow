@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Download, Trophy, Users, RefreshCw, Search, Eye, RotateCcw } from 'lucide-react'
+import { LayoutDashboard, Download, Trophy, TrendingUp, Users, Settings, RefreshCw, Search, Eye, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -266,9 +266,17 @@ export default function Dashboard() {
               <Trophy className="w-4 h-4 mr-2" />
               Ver Ranking
             </Button>
+            <Button onClick={() => navigate('/evolucao')} variant="outline" size="sm" className="flex-1 sm:flex-none">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Evolução
+            </Button>
             <Button onClick={() => navigate('/operadores')} variant="outline" size="sm" className="flex-1 sm:flex-none">
               <Users className="w-4 h-4 mr-2" />
               Operadores
+            </Button>
+            <Button onClick={() => navigate('/configuracoes')} variant="outline" size="sm" className="flex-1 sm:flex-none">
+              <Settings className="w-4 h-4 mr-2" />
+              Configurações
             </Button>
           </div>
         </div>
