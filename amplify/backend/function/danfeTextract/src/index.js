@@ -624,9 +624,67 @@ const emitOcrUsageLog = ({
   console.log(JSON.stringify(metricLog));
 };
 
+// Consulta o pedido no BaseLinker para obter os dados do cliente sem OCR.
+// O numero do pedido vem impresso (e em codigo de barras) na etiqueta DANFE.
+const consultarPedidoBaseLinker = async (orderId) => {
+  const token = process.env.BASELINKER_TOKEN;
+  if (!token) {
+    return { statusCode: 500, body: { message: 'BASELINKER_TOKEN nao configurado no Lambda.' } };
+  }
+
+  const params = new URLSearchParams({
+    method: 'getOrders',
+    parameters: JSON.stringify({ order_id: Number(orderId) })
+  });
+
+  const response = await fetch('https://api.baselinker.com/connector.php', {
+    method: 'POST',
+    headers: {
+      'X-BLToken': token,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: params.toString()
+  });
+
+  const data = await response.json();
+
+  if (data.status !== 'SUCCESS') {
+    console.warn('BaseLinker retornou erro:', JSON.stringify(data));
+    return { statusCode: 502, body: { message: 'Erro na consulta BaseLinker', detalhe: data.error_message || data.status } };
+  }
+
+  const order = Array.isArray(data.orders) ? data.orders[0] : null;
+  if (!order) {
+    return { statusCode: 404, body: { message: 'Pedido nao encontrado no BaseLinker', order_id: orderId } };
+  }
+
+  const clienteNome = order.invoice_fullname || order.delivery_fullname || order.delivery_company || order.invoice_company || '';
+
+  return {
+    statusCode: 200,
+    body: {
+      order_id: order.order_id,
+      cliente_nome: clienteNome,
+      cliente_source: 'baselinker',
+      email: order.email || null,
+      delivery_fullname: order.delivery_fullname || null,
+      invoice_fullname: order.invoice_fullname || null
+    }
+  };
+};
+
 exports.handler = async (event) => {
   try {
     const payload = normalizeEvent(event);
+
+    if (payload.mode === 'baselinker_order') {
+      if (!payload.order_id) {
+        return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ message: 'order_id obrigatorio para consulta BaseLinker.' }) };
+      }
+      const resultado = await consultarPedidoBaseLinker(payload.order_id);
+      return { statusCode: resultado.statusCode, headers: corsHeaders, body: JSON.stringify(resultado.body) };
+    }
+
     const bucket = payload.bucket || process.env.STORAGE_PACKFLOWSTORAGE_BUCKETNAME;
     const { key } = payload;
 
@@ -661,8 +719,13 @@ exports.handler = async (event) => {
     let formsReason = null;
 
     // Use o OCR simples primeiro; o modo FORMS é bem mais caro e so entra quando necessario.
-    const shouldRunForms = !clienteFromLines || !nfNumber;
-    if (!clienteFromLines) {
+    // Quando o cliente ja leu a chave pelo codigo de barras (skip_forms), nunca escala:
+    // a NF ja e conhecida e o nome do cliente vem por outra fonte.
+    const skipForms = payload.skip_forms === true;
+    const shouldRunForms = !skipForms && (!clienteFromLines || !nfNumber);
+    if (skipForms) {
+      formsReason = 'skipped_by_client';
+    } else if (!clienteFromLines) {
       formsReason = 'missing_cliente';
     } else if (!nfNumber) {
       formsReason = 'missing_nf';

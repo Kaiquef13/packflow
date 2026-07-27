@@ -6,7 +6,8 @@ import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import { useConfiguracao, DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS } from '@/hooks/useConfiguracao'
-import { validarChaveAcesso, nfFromChave, normalizeNf, clientesSimilares } from '@/lib/nfe'
+import { validarChaveAcesso, nfFromChave, serieFromChave, cnpjFromChave, normalizeNf, clientesSimilares } from '@/lib/nfe'
+import { decodeDanfeBarcodes } from '@/lib/barcode'
 import amplifyService from '@/services/amplify'
 
 export default function Embalagem() {
@@ -36,6 +37,7 @@ export default function Embalagem() {
   const [duplicidadeAutoResumo, setDuplicidadeAutoResumo] = useState(null)
   const [isRegistrandoDuplicidade, setIsRegistrandoDuplicidade] = useState(false)
   const [duplicidadeSuspeita, setDuplicidadeSuspeita] = useState(false)
+  const [infoNfNova, setInfoNfNova] = useState(null)
   const ocrJobIdRef = useRef(0)
   const feedbackTimeoutRef = useRef(null)
 
@@ -63,27 +65,50 @@ export default function Embalagem() {
     }
   }, [])
 
-  const startOcrBackground = async (fileKey) => {
+  const startOcrBackground = async (fileKey, barcode = null) => {
     const jobId = Date.now()
     ocrJobIdRef.current = jobId
     setIsOcrRunning(true)
     setOcrError(null)
 
     try {
-      const ocrResult = await extractData.mutateAsync({ key: fileKey })
-      if (ocrJobIdRef.current !== jobId) return
+      // Chave lida do codigo de barras e deterministica: NF sai validada dela e
+      // o Lambda pode pular o modo FORMS do Textract (o caro) com seguranca.
+      const nfDoBarcode = barcode?.nf || ''
+      let extractedCliente = ''
+      let ocrResult = null
+
+      // Melhor caso: chave + pedido lidos do barcode -> dados do cliente vem
+      // do BaseLinker (fonte exata, custo zero) e o Textract nem e chamado.
+      if (nfDoBarcode && barcode?.pedido) {
+        try {
+          const pedidoInfo = await amplifyService.consultarPedidoBaseLinker(barcode.pedido)
+          if (pedidoInfo?.cliente_nome) extractedCliente = pedidoInfo.cliente_nome
+        } catch (consultaErro) {
+          console.warn('Consulta BaseLinker falhou, usando OCR como fallback:', consultaErro)
+        }
+        if (ocrJobIdRef.current !== jobId) return
+      }
+
+      if (!extractedCliente) {
+        ocrResult = await extractData.mutateAsync({
+          key: fileKey,
+          skipForms: Boolean(nfDoBarcode)
+        })
+        if (ocrJobIdRef.current !== jobId) return
+        extractedCliente = ocrResult.cliente_nome || ''
+      }
 
       // A chave de acesso (44 digitos, com digito verificador) e mais confiavel
       // que o numero impresso: quando valida, o numero da NF derivado dela
       // corrige erros de leitura de digito do OCR.
-      const chaveAcesso = ocrResult.chave_acesso || ''
-      const chaveValida = validarChaveAcesso(chaveAcesso)
-      let extractedNf = normalizeNf(ocrResult.nf_number || '')
-      if (chaveValida) {
+      const chaveAcesso = barcode?.chave || ocrResult?.chave_acesso || ''
+      const chaveValida = Boolean(nfDoBarcode) || validarChaveAcesso(chaveAcesso)
+      let extractedNf = nfDoBarcode || normalizeNf(ocrResult?.nf_number || '')
+      if (!nfDoBarcode && chaveValida) {
         const nfDaChave = nfFromChave(chaveAcesso)
         if (nfDaChave) extractedNf = nfDaChave
       }
-      const extractedCliente = ocrResult.cliente_nome || ''
 
       setNfNumber(extractedNf)
       setClienteNome(extractedCliente)
@@ -100,13 +125,19 @@ export default function Embalagem() {
         })()
 
         if (original && isRecente) {
-          // Sem chave valida, o numero da NF pode ser um erro de leitura que
-          // colide com uma NF recente (numeracao sequencial). So registra
-          // automaticamente se o cliente tambem conferir; senao pede confirmacao.
+          // O numero da NF so e unico por CNPJ+serie, e a empresa opera com
+          // mais de um de cada — alem de o numero poder ser erro de leitura.
+          // Como o registro antigo nao guarda serie/CNPJ, so registra
+          // automaticamente quando o cliente tambem confere; senao o operador
+          // decide comparando com a serie/CNPJ lidos agora.
           const clienteConfere = clientesSimilares(extractedCliente, original.cliente_nome)
 
-          if (!chaveValida && !clienteConfere) {
+          if (!clienteConfere) {
             setEmbalagemOriginal(original)
+            setInfoNfNova(chaveValida ? {
+              serie: serieFromChave(chaveAcesso),
+              cnpj: cnpjFromChave(chaveAcesso)
+            } : null)
             setDuplicidadeSuspeita(true)
             setShowModalDuplicidade(true)
             setIsOcrRunning(false)
@@ -157,6 +188,12 @@ export default function Embalagem() {
     setIsProcessing(true)
 
     try {
+      // Decodifica os codigos de barras localmente em paralelo com o upload
+      const barcodePromise = decodeDanfeBarcodes(file).catch((error) => {
+        console.warn('Leitura de codigo de barras falhou:', error)
+        return null
+      })
+
       const { key: fileKey } = await uploadFile.mutateAsync(file)
       setFotoDanfeKey(fileKey)
       setIsProcessing(false)
@@ -164,7 +201,9 @@ export default function Embalagem() {
         setStartTime(new Date())
       }
       setEtapa(2)
-      startOcrBackground(fileKey)
+
+      const barcode = await barcodePromise
+      startOcrBackground(fileKey, barcode)
     } catch (error) {
       console.error('Erro na etapa 1:', error)
       alert('Erro ao processar foto da DANFE')
@@ -275,6 +314,7 @@ export default function Embalagem() {
   const handleSuspeitaConfirmada = async () => {
     if (isRegistrandoDuplicidade) return
     setDuplicidadeSuspeita(false)
+    setInfoNfNova(null)
     setIsDuplicada(true)
     try {
       const resumo = await registrarDuplicidadeAutomatica({
@@ -296,6 +336,7 @@ export default function Embalagem() {
     setShowModalDuplicidade(false)
     setEmbalagemOriginal(null)
     setIsDuplicada(false)
+    setInfoNfNova(null)
   }
 
   const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey }) => {
@@ -362,6 +403,7 @@ export default function Embalagem() {
     setEmbalagemOriginal(null)
     setIsDuplicada(false)
     setDuplicidadeSuspeita(false)
+    setInfoNfNova(null)
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -380,6 +422,7 @@ export default function Embalagem() {
     setEmbalagemOriginal(null)
     setIsDuplicada(false)
     setDuplicidadeSuspeita(false)
+    setInfoNfNova(null)
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -517,6 +560,7 @@ export default function Embalagem() {
           resumoDuplicidade={duplicidadeAutoResumo}
           modoConfirmacao={duplicidadeSuspeita}
           clienteNovo={clienteNome}
+          infoNfNova={infoNfNova}
           onConfirmar={duplicidadeSuspeita ? handleSuspeitaConfirmada : duplicidadeAutoResumo ? handleDuplicidadeAutoConfirm : confirmarDuplicidade}
           onRecusar={duplicidadeSuspeita ? handleSuspeitaRecusada : undefined}
           isProcessing={isRegistrandoDuplicidade || isProcessing}

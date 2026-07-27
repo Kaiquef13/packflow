@@ -16,11 +16,23 @@ export function validarChaveAcesso(chave) {
   return dv === Number(digits[43])
 }
 
-// nNF ocupa as posicoes 26-34 (1-based) da chave de acesso
+// Layout da chave: UF(2) AAMM(4) CNPJ(14) modelo(2) serie(3) nNF(9) tpEmis(1) cNF(8) DV(1)
 export function nfFromChave(chave) {
   const digits = String(chave || '').replace(/\D/g, '')
   if (digits.length !== 44) return ''
   return normalizeNf(digits.slice(25, 34))
+}
+
+export function serieFromChave(chave) {
+  const digits = String(chave || '').replace(/\D/g, '')
+  if (digits.length !== 44) return ''
+  return digits.slice(22, 25).replace(/^0+/, '') || '0'
+}
+
+export function cnpjFromChave(chave) {
+  const digits = String(chave || '').replace(/\D/g, '')
+  if (digits.length !== 44) return ''
+  return digits.slice(6, 20)
 }
 
 export function normalizeNf(nf) {

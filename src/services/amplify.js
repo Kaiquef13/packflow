@@ -545,7 +545,7 @@ const textractApiName = textractApiConfig?.name;
 
 
 
-export async function extractDataFromFile({ key }) {
+export async function extractDataFromFile({ key, skipForms = false }) {
 
   if (!key) {
 
@@ -589,7 +589,9 @@ export async function extractDataFromFile({ key }) {
 
           key: s3Key,
 
-          bucket
+          bucket,
+
+          skip_forms: skipForms === true
 
         }
 
@@ -617,6 +619,33 @@ export async function extractDataFromFile({ key }) {
 
 
 
+// Consulta os dados do cliente pelo numero do pedido BaseLinker (lido do
+// codigo de barras da etiqueta). Sem OCR, sem custo de Textract.
+export async function consultarPedidoBaseLinker(orderId) {
+  if (!orderId) {
+    throw new Error('Pedido BaseLinker sem numero.');
+  }
+
+  if (!textractApiName) {
+    throw new Error('Endpoint da API nao configurado.');
+  }
+
+  const restOperation = post({
+    apiName: textractApiName,
+    path: '/ocr',
+    options: {
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        mode: 'baselinker_order',
+        order_id: orderId
+      }
+    }
+  });
+
+  const { body } = await restOperation.response;
+  return body.json();
+}
+
 const amplifyService = {
   // Operadores
   listOperadores,
@@ -642,6 +671,7 @@ const amplifyService = {
 
   // OCR
   extractDataFromFile,
+  consultarPedidoBaseLinker,
 };
 
 export default amplifyService;

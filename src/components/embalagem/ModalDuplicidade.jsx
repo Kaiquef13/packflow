@@ -14,7 +14,8 @@ export default function ModalDuplicidade({
   autoSaved = false,
   resumoDuplicidade = null,
   modoConfirmacao = false,
-  clienteNovo = ''
+  clienteNovo = '',
+  infoNfNova = null
 }) {
   const audioContextRef = useRef(null)
   const oscillatorRef = useRef(null)
@@ -115,16 +116,22 @@ export default function ModalDuplicidade({
             </p>
             <p className="text-center text-orange-800 text-sm">
               {modoConfirmacao
-                ? <>A NF <strong>{displayNf}</strong> pode ser um erro de leitura. Confira a DANFE física antes de decidir.</>
+                ? <>A NF <strong>{displayNf}</strong> pode ser de outra série/CNPJ ou um erro de leitura. Confira a DANFE física antes de decidir.</>
                 : <>A nota fiscal <strong>{displayNf}</strong> já existe no sistema.</>}
             </p>
           </motion.div>
 
           {modoConfirmacao && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1">
               <p className="text-sm text-blue-900">
                 <span className="font-semibold">Cliente lido agora:</span> {clienteNovo || '(não identificado)'}
               </p>
+              {infoNfNova && (
+                <p className="text-sm text-blue-900">
+                  <span className="font-semibold">Série:</span> {infoNfNova.serie}
+                  <span className="font-semibold ml-3">CNPJ emitente:</span> ...{String(infoNfNova.cnpj).slice(-6)}
+                </p>
+              )}
             </div>
           )}
 
