@@ -6,6 +6,7 @@ import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import { useConfiguracao, DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS } from '@/hooks/useConfiguracao'
+import { validarChaveAcesso, nfFromChave, normalizeNf, clientesSimilares } from '@/lib/nfe'
 import amplifyService from '@/services/amplify'
 
 export default function Embalagem() {
@@ -34,6 +35,7 @@ export default function Embalagem() {
   const [isSalvandoObservacao, setIsSalvandoObservacao] = useState(false)
   const [duplicidadeAutoResumo, setDuplicidadeAutoResumo] = useState(null)
   const [isRegistrandoDuplicidade, setIsRegistrandoDuplicidade] = useState(false)
+  const [duplicidadeSuspeita, setDuplicidadeSuspeita] = useState(false)
   const ocrJobIdRef = useRef(0)
   const feedbackTimeoutRef = useRef(null)
 
@@ -71,7 +73,16 @@ export default function Embalagem() {
       const ocrResult = await extractData.mutateAsync({ key: fileKey })
       if (ocrJobIdRef.current !== jobId) return
 
-      const extractedNf = ocrResult.nf_number || ''
+      // A chave de acesso (44 digitos, com digito verificador) e mais confiavel
+      // que o numero impresso: quando valida, o numero da NF derivado dela
+      // corrige erros de leitura de digito do OCR.
+      const chaveAcesso = ocrResult.chave_acesso || ''
+      const chaveValida = validarChaveAcesso(chaveAcesso)
+      let extractedNf = normalizeNf(ocrResult.nf_number || '')
+      if (chaveValida) {
+        const nfDaChave = nfFromChave(chaveAcesso)
+        if (nfDaChave) extractedNf = nfDaChave
+      }
       const extractedCliente = ocrResult.cliente_nome || ''
 
       setNfNumber(extractedNf)
@@ -89,6 +100,19 @@ export default function Embalagem() {
         })()
 
         if (original && isRecente) {
+          // Sem chave valida, o numero da NF pode ser um erro de leitura que
+          // colide com uma NF recente (numeracao sequencial). So registra
+          // automaticamente se o cliente tambem conferir; senao pede confirmacao.
+          const clienteConfere = clientesSimilares(extractedCliente, original.cliente_nome)
+
+          if (!chaveValida && !clienteConfere) {
+            setEmbalagemOriginal(original)
+            setDuplicidadeSuspeita(true)
+            setShowModalDuplicidade(true)
+            setIsOcrRunning(false)
+            return
+          }
+
           setEmbalagemOriginal(original)
           setIsDuplicada(true)
           try {
@@ -248,6 +272,32 @@ export default function Embalagem() {
     }
   }
 
+  const handleSuspeitaConfirmada = async () => {
+    if (isRegistrandoDuplicidade) return
+    setDuplicidadeSuspeita(false)
+    setIsDuplicada(true)
+    try {
+      const resumo = await registrarDuplicidadeAutomatica({
+        original: embalagemOriginal,
+        nfNumberValue: nfNumber,
+        clienteValue: clienteNome,
+        fileKey: fotoDanfeKey
+      })
+      setDuplicidadeAutoResumo(resumo)
+    } catch (error) {
+      console.error('Erro ao registrar duplicidade confirmada:', error)
+      alert('Erro ao registrar duplicidade. Tente novamente.')
+      setDuplicidadeAutoResumo(null)
+    }
+  }
+
+  const handleSuspeitaRecusada = () => {
+    setDuplicidadeSuspeita(false)
+    setShowModalDuplicidade(false)
+    setEmbalagemOriginal(null)
+    setIsDuplicada(false)
+  }
+
   const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey }) => {
     setIsRegistrandoDuplicidade(true)
     try {
@@ -311,6 +361,7 @@ export default function Embalagem() {
     setShowModalDuplicidade(false)
     setEmbalagemOriginal(null)
     setIsDuplicada(false)
+    setDuplicidadeSuspeita(false)
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -328,6 +379,7 @@ export default function Embalagem() {
     setShowModalDuplicidade(false)
     setEmbalagemOriginal(null)
     setIsDuplicada(false)
+    setDuplicidadeSuspeita(false)
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -463,7 +515,10 @@ export default function Embalagem() {
           embalagemOriginal={embalagemOriginal}
           autoSaved={Boolean(duplicidadeAutoResumo)}
           resumoDuplicidade={duplicidadeAutoResumo}
-          onConfirmar={duplicidadeAutoResumo ? handleDuplicidadeAutoConfirm : confirmarDuplicidade}
+          modoConfirmacao={duplicidadeSuspeita}
+          clienteNovo={clienteNome}
+          onConfirmar={duplicidadeSuspeita ? handleSuspeitaConfirmada : duplicidadeAutoResumo ? handleDuplicidadeAutoConfirm : confirmarDuplicidade}
+          onRecusar={duplicidadeSuspeita ? handleSuspeitaRecusada : undefined}
           isProcessing={isRegistrandoDuplicidade || isProcessing}
         />
       )}

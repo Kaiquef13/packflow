@@ -9,9 +9,12 @@ export default function ModalDuplicidade({
   nfNumber,
   embalagemOriginal,
   onConfirmar,
+  onRecusar,
   isProcessing = false,
   autoSaved = false,
-  resumoDuplicidade = null
+  resumoDuplicidade = null,
+  modoConfirmacao = false,
+  clienteNovo = ''
 }) {
   const audioContextRef = useRef(null)
   const oscillatorRef = useRef(null)
@@ -95,7 +98,7 @@ export default function ModalDuplicidade({
             </motion.div>
           </motion.div>
           <DialogTitle className="text-center text-white text-2xl">
-            {isAuto ? 'Duplicidade registrada!' : '⚠ NOTA FISCAL DUPLICADA!'}
+            {modoConfirmacao ? '⚠ POSSÍVEL DUPLICIDADE' : isAuto ? 'Duplicidade registrada!' : '⚠ NOTA FISCAL DUPLICADA!'}
           </DialogTitle>
         </DialogHeader>
 
@@ -106,12 +109,24 @@ export default function ModalDuplicidade({
             className="bg-orange-50 border-2 border-orange-400 rounded-lg p-4"
           >
             <p className="text-center font-bold text-orange-900 text-lg mb-2">
-              {isAuto ? 'Duplicidade registrada automaticamente.' : 'Esta NF já foi embalada!'}
+              {modoConfirmacao
+                ? 'O número da NF já existe, mas o cliente é diferente.'
+                : isAuto ? 'Duplicidade registrada automaticamente.' : 'Esta NF já foi embalada!'}
             </p>
             <p className="text-center text-orange-800 text-sm">
-              A nota fiscal <strong>{displayNf}</strong> já existe no sistema.
+              {modoConfirmacao
+                ? <>A NF <strong>{displayNf}</strong> pode ser um erro de leitura. Confira a DANFE física antes de decidir.</>
+                : <>A nota fiscal <strong>{displayNf}</strong> já existe no sistema.</>}
             </p>
           </motion.div>
+
+          {modoConfirmacao && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-900">
+                <span className="font-semibold">Cliente lido agora:</span> {clienteNovo || '(não identificado)'}
+              </p>
+            </div>
+          )}
 
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-semibold text-gray-900 mb-2">Informações da embalagem original:</h3>
@@ -149,21 +164,50 @@ export default function ModalDuplicidade({
             </div>
           </div>
 
-          <Button
-            onClick={onConfirmar}
-            disabled={isProcessing}
-            size="lg"
-            className="w-full bg-orange-600 hover:bg-orange-700"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Processando...
-              </>
-            ) : (
-              isAuto ? 'OK - Próxima NF' : 'Entendi - Registrar como duplicada'
-            )}
-          </Button>
+          {modoConfirmacao ? (
+            <div className="space-y-2">
+              <Button
+                onClick={onRecusar}
+                disabled={isProcessing}
+                size="lg"
+                className="w-full bg-emerald-600 hover:bg-emerald-700"
+              >
+                Não é duplicada — continuar embalagem
+              </Button>
+              <Button
+                onClick={onConfirmar}
+                disabled={isProcessing}
+                size="lg"
+                variant="outline"
+                className="w-full border-orange-400 text-orange-700 hover:bg-orange-50"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  'É duplicada — registrar'
+                )}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={onConfirmar}
+              disabled={isProcessing}
+              size="lg"
+              className="w-full bg-orange-600 hover:bg-orange-700"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                isAuto ? 'OK - Próxima NF' : 'Entendi - Registrar como duplicada'
+              )}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
