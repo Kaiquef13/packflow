@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { Camera, SwitchCamera, ZoomIn, ZoomOut, Check, Loader2, ArrowLeft } from 'lucide-react'
+import { Camera, SwitchCamera, ZoomIn, ZoomOut, Check, Loader2, ArrowLeft, ScanBarcode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
+import { iniciarLeituraContinua } from '@/lib/barcode'
 
 const CAMERA_PREFERENCE_KEY = 'packflow_preferred_camera'
 
@@ -19,6 +20,21 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
   const [capturedFile, setCapturedFile] = useState(null)
   const [error, setError] = useState(null)
   const [cameraReady, setCameraReady] = useState(false)
+  const [barcodeLido, setBarcodeLido] = useState(null)
+  const barcodeLidoRef = useRef(null)
+
+  // Leitura continua dos codigos de barras enquanto o operador mira (so na etapa da DANFE)
+  useEffect(() => {
+    if (etapa !== 1 || capturedImage || !cameraReady || !videoRef.current) return
+
+    const parar = iniciarLeituraContinua(videoRef.current, (resultado) => {
+      barcodeLidoRef.current = resultado
+      setBarcodeLido(resultado)
+      if (navigator.vibrate) navigator.vibrate(80)
+    })
+
+    return parar
+  }, [etapa, capturedImage, cameraReady, selectedCameraIndex])
 
   // Listar câmeras disponíveis
   useEffect(() => {
@@ -198,7 +214,7 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
 
   const confirmPhoto = () => {
     if (!capturedFile || !onCapture) return
-    onCapture(capturedFile, capturedImage)
+    onCapture(capturedFile, capturedImage, barcodeLidoRef.current)
   }
 
   return (
@@ -283,6 +299,30 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
         </AnimatePresence>
 
         <canvas ref={canvasRef} className="hidden" />
+
+        {/* Indicador de leitura do codigo de barras (etapa DANFE) */}
+        {etapa === 1 && !capturedImage && cameraReady && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
+            {barcodeLido?.nf ? (
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-lg"
+              >
+                <Check className="w-5 h-5" />
+                <span className="font-semibold">
+                  NF {barcodeLido.nf} lida
+                  {barcodeLido.pedido ? ` • Pedido ${barcodeLido.pedido}` : ''}
+                </span>
+              </motion.div>
+            ) : (
+              <div className="flex items-center gap-2 bg-black/60 text-white px-4 py-2 rounded-full">
+                <ScanBarcode className="w-5 h-5 animate-pulse" />
+                <span className="text-sm">Aponte para o código de barras da DANFE</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Camera Controls */}
         {!capturedImage && cameraReady && (

@@ -91,9 +91,15 @@ export default function Embalagem() {
       }
 
       if (!extractedCliente) {
+        // Telemetria: registra nos logs do Lambda o que o barcode conseguiu ler
+        const barcodeStatus = barcode?.nf
+          ? (barcode?.pedido ? 'chave_e_pedido' : 'so_chave')
+          : (barcode?.pedido ? 'so_pedido' : 'nenhum')
+
         ocrResult = await extractData.mutateAsync({
           key: fileKey,
-          skipForms: Boolean(nfDoBarcode)
+          skipForms: Boolean(nfDoBarcode),
+          barcodeStatus
         })
         if (ocrJobIdRef.current !== jobId) return
         extractedCliente = ocrResult.cliente_nome || ''
@@ -184,15 +190,19 @@ export default function Embalagem() {
     }
   }
 
-  const handleCaptureEtapa1 = async (file, preview) => {
+  const handleCaptureEtapa1 = async (file, preview, barcodeAoVivo = null) => {
     setIsProcessing(true)
 
     try {
-      // Decodifica os codigos de barras localmente em paralelo com o upload
-      const barcodePromise = decodeDanfeBarcodes(file).catch((error) => {
-        console.warn('Leitura de codigo de barras falhou:', error)
-        return null
-      })
+      // A leitura ao vivo (durante a mira) e a mais confiavel; a foto parada
+      // e o fallback para completar o que faltou (ex: pedido sem chave).
+      const precisaFotoParada = !barcodeAoVivo?.nf || !barcodeAoVivo?.pedido
+      const barcodePromise = precisaFotoParada
+        ? decodeDanfeBarcodes(file).catch((error) => {
+            console.warn('Leitura de codigo de barras da foto falhou:', error)
+            return null
+          })
+        : Promise.resolve(null)
 
       const { key: fileKey } = await uploadFile.mutateAsync(file)
       setFotoDanfeKey(fileKey)
@@ -202,7 +212,12 @@ export default function Embalagem() {
       }
       setEtapa(2)
 
-      const barcode = await barcodePromise
+      const barcodeFoto = await barcodePromise
+      const barcode = {
+        chave: barcodeAoVivo?.chave || barcodeFoto?.chave || '',
+        nf: barcodeAoVivo?.nf || barcodeFoto?.nf || '',
+        pedido: barcodeAoVivo?.pedido || barcodeFoto?.pedido || ''
+      }
       startOcrBackground(fileKey, barcode)
     } catch (error) {
       console.error('Erro na etapa 1:', error)

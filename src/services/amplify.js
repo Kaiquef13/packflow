@@ -545,7 +545,7 @@ const textractApiName = textractApiConfig?.name;
 
 
 
-export async function extractDataFromFile({ key, skipForms = false }) {
+export async function extractDataFromFile({ key, skipForms = false, barcodeStatus = null }) {
 
   if (!key) {
 
@@ -591,7 +591,9 @@ export async function extractDataFromFile({ key, skipForms = false }) {
 
           bucket,
 
-          skip_forms: skipForms === true
+          skip_forms: skipForms === true,
+
+          barcode_status: barcodeStatus
 
         }
 

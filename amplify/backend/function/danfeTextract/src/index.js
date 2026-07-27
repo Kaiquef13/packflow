@@ -589,7 +589,8 @@ const emitOcrUsageLog = ({
   usedForms,
   usedComprehend,
   formsReason,
-  estimatedTextractCostUsd
+  estimatedTextractCostUsd,
+  barcodeStatus
 }) => {
   const mode = usedForms ? 'forms_fallback' : 'detect_text_only';
   const metricLog = {
@@ -618,7 +619,8 @@ const emitOcrUsageLog = ({
     FoundCliente: clienteNome ? 'yes' : 'no',
     ClienteSource: clienteSource || 'none',
     UsedComprehend: usedComprehend ? 'yes' : 'no',
-    FormsReason: formsReason || 'not_needed'
+    FormsReason: formsReason || 'not_needed',
+    BarcodeStatus: barcodeStatus || 'nao_informado'
   };
 
   console.log(JSON.stringify(metricLog));
@@ -682,6 +684,12 @@ exports.handler = async (event) => {
         return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ message: 'order_id obrigatorio para consulta BaseLinker.' }) };
       }
       const resultado = await consultarPedidoBaseLinker(payload.order_id);
+      console.log(JSON.stringify({
+        baselinker_lookup: true,
+        order_id: payload.order_id,
+        status: resultado.statusCode,
+        encontrou_cliente: Boolean(resultado.body?.cliente_nome)
+      }));
       return { statusCode: resultado.statusCode, headers: corsHeaders, body: JSON.stringify(resultado.body) };
     }
 
@@ -778,7 +786,8 @@ exports.handler = async (event) => {
       usedForms,
       usedComprehend: Boolean(clienteFromComprehend),
       formsReason,
-      estimatedTextractCostUsd
+      estimatedTextractCostUsd,
+      barcodeStatus: payload.barcode_status || null
     });
 
     return {
