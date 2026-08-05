@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useUpdateEmbalagem } from '@/hooks/useEmbalagens'
+import { limparMarcadores } from '@/lib/nfe'
 import ModalAvaria from './ModalAvaria'
 import ImageLightbox from './ImageLightbox'
 import amplifyService from '@/services/amplify'
@@ -209,10 +210,10 @@ export default function ModalDetalhes({ embalagem, isOpen, onClose, onUpdateSucc
               </div>
             </div>
 
-            {embalagem.observacao && (
+            {limparMarcadores(embalagem.observacao) && (
               <div className="border-t pt-4">
                 <p className="text-sm text-gray-600">Observação</p>
-                <p className="font-medium">{embalagem.observacao}</p>
+                <p className="font-medium">{limparMarcadores(embalagem.observacao)}</p>
               </div>
             )}
           </div>

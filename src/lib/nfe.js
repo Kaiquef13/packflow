@@ -35,6 +35,26 @@ export function cnpjFromChave(chave) {
   return digits.slice(6, 20)
 }
 
+// A chave de acesso e gravada dentro da observacao como marcador, ja que o
+// schema (AppSync) nao tem campo proprio para ela. Com a chave no registro,
+// a checagem de duplicidade compara o documento completo (CNPJ+serie+NF),
+// eliminando colisoes entre os CNPJs/series da empresa.
+const MARCADOR_CHAVE_REGEX = /\[CHAVE:(\d{44})\]/
+
+export function montarMarcadorChave(chave) {
+  const digits = String(chave || '').replace(/\D/g, '')
+  return digits.length === 44 ? `[CHAVE:${digits}]` : ''
+}
+
+export function extrairChaveDeObservacao(observacao) {
+  const match = String(observacao || '').match(MARCADOR_CHAVE_REGEX)
+  return match ? match[1] : ''
+}
+
+export function limparMarcadores(observacao) {
+  return String(observacao || '').replace(MARCADOR_CHAVE_REGEX, '').replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim()
+}
+
 export function normalizeNf(nf) {
   const digits = String(nf || '').replace(/\D/g, '')
   return digits.replace(/^0+/, '') || ''

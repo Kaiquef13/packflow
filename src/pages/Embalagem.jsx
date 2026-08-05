@@ -6,7 +6,7 @@ import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import { useConfiguracao, DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS } from '@/hooks/useConfiguracao'
-import { validarChaveAcesso, nfFromChave, serieFromChave, cnpjFromChave, normalizeNf, clientesSimilares } from '@/lib/nfe'
+import { validarChaveAcesso, nfFromChave, serieFromChave, cnpjFromChave, normalizeNf, clientesSimilares, montarMarcadorChave, extrairChaveDeObservacao, limparMarcadores } from '@/lib/nfe'
 import { decodeDanfeBarcodes } from '@/lib/barcode'
 import amplifyService from '@/services/amplify'
 
@@ -38,6 +38,7 @@ export default function Embalagem() {
   const [isRegistrandoDuplicidade, setIsRegistrandoDuplicidade] = useState(false)
   const [duplicidadeSuspeita, setDuplicidadeSuspeita] = useState(false)
   const [infoNfNova, setInfoNfNova] = useState(null)
+  const [chaveAcessoLida, setChaveAcessoLida] = useState('')
   const ocrJobIdRef = useRef(0)
   const feedbackTimeoutRef = useRef(null)
 
@@ -118,12 +119,32 @@ export default function Embalagem() {
 
       setNfNumber(extractedNf)
       setClienteNome(extractedCliente)
+      setChaveAcessoLida(chaveValida ? chaveAcesso : '')
 
       if (extractedNf) {
         const embalagens = await amplifyService.filterEmbalagens({ nf_number: { eq: extractedNf } })
         if (ocrJobIdRef.current !== jobId) return
 
-        const original = embalagens?.find(e => !e.is_duplicada)
+        // O numero da NF so e unico por CNPJ+serie, e a empresa opera com mais
+        // de um de cada. Registros novos guardam a chave na observacao; quando
+        // as duas chaves existem, a comparacao e pelo documento completo.
+        const candidatos = (embalagens || []).filter(e => !e.is_duplicada)
+        let original = null
+        let mesmaChaveConfirmada = false
+
+        if (chaveValida) {
+          const comMesmaChave = candidatos.find(c => extrairChaveDeObservacao(c.observacao) === chaveAcesso)
+          if (comMesmaChave) {
+            original = comMesmaChave
+            mesmaChaveConfirmada = true
+          } else {
+            // Candidatos com chave gravada divergente sao de outro CNPJ/serie:
+            // nao sao duplicata deste documento. Ficam so os sem chave (incerto).
+            original = candidatos.find(c => !extrairChaveDeObservacao(c.observacao)) || null
+          }
+        } else {
+          original = candidatos[0] || null
+        }
 
         const isRecente = original && (() => {
           const diffDias = (Date.now() - new Date(original.createdAt).getTime()) / (1000 * 60 * 60 * 24)
@@ -131,14 +152,12 @@ export default function Embalagem() {
         })()
 
         if (original && isRecente) {
-          // O numero da NF so e unico por CNPJ+serie, e a empresa opera com
-          // mais de um de cada — alem de o numero poder ser erro de leitura.
-          // Como o registro antigo nao guarda serie/CNPJ, so registra
-          // automaticamente quando o cliente tambem confere; senao o operador
-          // decide comparando com a serie/CNPJ lidos agora.
+          // Mesma chave = mesmo documento, duplicata certa. Sem chave gravada
+          // no registro antigo, so registra automaticamente quando o cliente
+          // tambem confere; senao o operador decide.
           const clienteConfere = clientesSimilares(extractedCliente, original.cliente_nome)
 
-          if (!clienteConfere) {
+          if (!mesmaChaveConfirmada && !clienteConfere) {
             setEmbalagemOriginal(original)
             setInfoNfNova(chaveValida ? {
               serie: serieFromChave(chaveAcesso),
@@ -157,7 +176,8 @@ export default function Embalagem() {
               original,
               nfNumberValue: extractedNf,
               clienteValue: extractedCliente,
-              fileKey
+              fileKey,
+              chaveValue: chaveValida ? chaveAcesso : ''
             })
             if (ocrJobIdRef.current !== jobId) return
             setDuplicidadeAutoResumo(resumo)
@@ -284,6 +304,12 @@ export default function Embalagem() {
         ? `${alertaPrefix}[ALERTA: Tempo suspeito - ${tempoTotalSegundos}s]`.trim()
         : observacao || ''
 
+      // Guarda a chave de acesso no registro (via marcador na observacao)
+      // para futuras checagens de duplicidade compararem o documento completo
+      const observacaoComChave = [observacaoFinal, montarMarcadorChave(chaveAcessoLida)]
+        .filter(Boolean)
+        .join('\n')
+
       const data = {
         nf_number: nfNumber,
         cliente_nome: clienteNome,
@@ -293,7 +319,7 @@ export default function Embalagem() {
         foto_danfe_url: fotoDanfeKey,
         foto_conteudo_url: fotoConteudoKey,
         foto_caixa_url: overrides.fotoCaixaKey ?? fotoCaixaKey,
-        observacao: observacaoFinal,
+        observacao: observacaoComChave,
         operador_id: operador.id,
         operador_nome: operador.apelido || operador.nome,
         pendente_extracao: !nfNumber,
@@ -354,13 +380,16 @@ export default function Embalagem() {
     setInfoNfNova(null)
   }
 
-  const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey }) => {
+  const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey, chaveValue = '' }) => {
     setIsRegistrandoDuplicidade(true)
     try {
       const now = new Date()
       const nfValue = nfNumberValue || nfNumber
       const cliente = clienteValue || clienteNome
-      const observacaoDup = `[DUPLICIDADE] Registro vinculado à NF original ${original?.nf_number || original?.id || ''}`
+      const observacaoDup = [
+        `[DUPLICIDADE] Registro vinculado à NF original ${original?.nf_number || original?.id || ''}`,
+        montarMarcadorChave(chaveValue || chaveAcessoLida)
+      ].filter(Boolean).join('\n')
 
       const data = {
         nf_number: nfValue,
@@ -419,6 +448,7 @@ export default function Embalagem() {
     setIsDuplicada(false)
     setDuplicidadeSuspeita(false)
     setInfoNfNova(null)
+    setChaveAcessoLida('')
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -438,6 +468,7 @@ export default function Embalagem() {
     setIsDuplicada(false)
     setDuplicidadeSuspeita(false)
     setInfoNfNova(null)
+    setChaveAcessoLida('')
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)

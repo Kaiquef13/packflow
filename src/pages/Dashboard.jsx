@@ -9,6 +9,7 @@ import { useEmbalagens, useEmbalagensPeriodo } from '@/hooks/useEmbalagens'
 import ResumoCards from '@/components/dashboard/ResumoCards'
 import ModalDetalhes from '@/components/dashboard/ModalDetalhes'
 import { formatDateTime, formatTime } from '@/lib/utils'
+import { limparMarcadores } from '@/lib/nfe'
 import { format } from 'date-fns'
 
 const INITIAL_FILTERS = {
@@ -145,7 +146,7 @@ export default function Dashboard() {
       e.operador_nome || '-',
       e.tempo_total_segundos || 0,
       e.status || '-',
-      e.observacao || '-'
+      limparMarcadores(e.observacao) || '-'
     ])
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
