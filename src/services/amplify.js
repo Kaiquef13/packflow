@@ -143,6 +143,16 @@ export async function deleteOperador(id) {
 
 // ============ EMBALAGENS ============
 
+// O DynamoDB devolve os itens sem ordem util (ordem de particao), entao a
+// ordenacao por data e sempre aplicada aqui, na fonte.
+function ordenarPorData(items, sortDirection = 'DESC') {
+  return [...items].sort((a, b) => {
+    const dataA = new Date(a.createdAt || a.start_time || 0).getTime();
+    const dataB = new Date(b.createdAt || b.start_time || 0).getTime();
+    return sortDirection === 'DESC' ? dataB - dataA : dataA - dataB;
+  });
+}
+
 export async function listEmbalagensPeriodo(startDate, endDate, extraFilter = {}) {
   try {
     const query = /* GraphQL */ `
@@ -202,7 +212,7 @@ export async function listEmbalagensPeriodo(startDate, endDate, extraFilter = {}
       nextToken = page?.nextToken || null;
     } while (nextToken);
 
-    return items;
+    return ordenarPorData(items);
   } catch (error) {
     console.error('Erro ao listar embalagens por período:', error);
     throw error;
@@ -251,13 +261,7 @@ export async function listEmbalagens(sortDirection = 'DESC') {
     });
 
     const items = result.data?.listEmbalagems?.items || [];
-
-    // Ordenar por createdAt (DESC ou ASC)
-    return items.sort((a, b) => {
-      const dateA = new Date(a.createdAt);
-      const dateB = new Date(b.createdAt);
-      return sortDirection === 'DESC' ? dateB - dateA : dateA - dateB;
-    });
+    return ordenarPorData(items, sortDirection);
   } catch (error) {
     console.error('Erro ao listar embalagens:', error);
     throw error;
@@ -319,7 +323,7 @@ export async function filterEmbalagens(filter) {
       nextToken = page?.nextToken || null;
     } while (nextToken);
 
-    return items;
+    return ordenarPorData(items);
   } catch (error) {
     console.error('Erro ao filtrar embalagens:', error);
     throw error;

@@ -197,6 +197,8 @@ export default function Dashboard() {
 
     return true
   })
+    // Mais recentes no topo, independente da ordem em que o backend devolveu
+    .sort((a, b) => new Date(b.createdAt || b.start_time || 0) - new Date(a.createdAt || a.start_time || 0))
 
   const filtrosAtivos = [
     filtros.periodo !== 'todas',
