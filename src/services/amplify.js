@@ -1,6 +1,6 @@
 ﻿import { Amplify } from 'aws-amplify';
 import { generateClient, post } from 'aws-amplify/api';
-import { uploadData, getUrl } from 'aws-amplify/storage';
+import { uploadData, downloadData, getUrl } from 'aws-amplify/storage';
 import awsconfig from '../aws-exports';
 
 // Configurar Amplify
@@ -399,78 +399,53 @@ export async function updateEmbalagem(id, data) {
 
 // ============ CONFIGURACAO ============
 
-const CONFIGURACAO_ID = 'global'
-const DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS = 60
+// Guardada como JSON no S3 em vez de um modelo GraphQL: o `amplify push` que
+// criaria a tabela esta bloqueado por um bug da CLI Gen1, e o S3 ja esta
+// configurado e em uso pelo app. Mesma interface de antes.
+const CONFIGURACAO_KEY = 'configuracao/global.json';
+const DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS = 60;
 
 export async function getConfiguracao() {
   try {
-    const query = /* GraphQL */ `
-      query GetConfiguracao($id: ID!) {
-        getConfiguracao(id: $id) {
-          id
-          tempo_minimo_suspeita_segundos
-          createdAt
-          updatedAt
-        }
-      }
-    `;
+    const { body } = await downloadData({
+      key: CONFIGURACAO_KEY,
+      options: { level: 'public' }
+    }).result;
 
-    const result = await client.graphql({
-      query,
-      variables: { id: CONFIGURACAO_ID }
-    });
-    return result.data?.getConfiguracao || null;
+    const texto = await body.text();
+    return JSON.parse(texto);
   } catch (error) {
-    console.error('Erro ao buscar configuração:', error);
-    throw error;
+    // Sem configuracao salva ainda: o app usa o valor padrao.
+    // Nunca propaga o erro para nao travar o fluxo de embalagem.
+    const naoEncontrado = error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404;
+    if (!naoEncontrado) {
+      console.warn('Nao foi possivel ler a configuracao, usando padrao:', error);
+    }
+    return null;
   }
 }
 
 export async function upsertConfiguracao(data) {
   try {
-    const existente = await getConfiguracao();
+    const atual = (await getConfiguracao()) || {
+      tempo_minimo_suspeita_segundos: DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS
+    };
 
-    if (existente) {
-      const mutation = /* GraphQL */ `
-        mutation UpdateConfiguracao($input: UpdateConfiguracaoInput!) {
-          updateConfiguracao(input: $input) {
-            id
-            tempo_minimo_suspeita_segundos
-            updatedAt
-          }
-        }
-      `;
+    const novo = {
+      ...atual,
+      ...data,
+      updatedAt: new Date().toISOString()
+    };
 
-      const result = await client.graphql({
-        query: mutation,
-        variables: { input: { id: CONFIGURACAO_ID, ...data } }
-      });
-      return result.data.updateConfiguracao;
-    }
+    await uploadData({
+      key: CONFIGURACAO_KEY,
+      data: JSON.stringify(novo),
+      options: { contentType: 'application/json', level: 'public' }
+    }).result;
 
-    const mutation = /* GraphQL */ `
-      mutation CreateConfiguracao($input: CreateConfiguracaoInput!) {
-        createConfiguracao(input: $input) {
-          id
-          tempo_minimo_suspeita_segundos
-          updatedAt
-        }
-      }
-    `;
-
-    const result = await client.graphql({
-      query: mutation,
-      variables: {
-        input: {
-          id: CONFIGURACAO_ID,
-          tempo_minimo_suspeita_segundos: DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS,
-          ...data
-        }
-      }
-    });
-    return result.data.createConfiguracao;
+    return novo;
   } catch (error) {
-    console.error('Erro ao salvar configuração:', error);
+    console.error('Erro ao salvar configuracao:', error);
     throw error;
   }
 }

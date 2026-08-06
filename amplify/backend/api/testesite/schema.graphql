@@ -75,19 +75,9 @@ type Embalagem @model {
   updatedAt: AWSDateTime!
 }
 
-# ============================================
-# MODELO: Configuracao
-# ============================================
-type Configuracao @model {
-  id: ID!
-
-  # Tempo mínimo (em segundos) para considerar uma embalagem suspeita
-  tempo_minimo_suspeita_segundos: Int!
-
-  # Timestamps automáticos
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-}
+# Configuracao do sistema (tempo minimo de suspeita) fica em JSON no S3,
+# nao como modelo aqui: o `amplify push` esta bloqueado por um bug da CLI
+# Gen1 ("Parameters must have values"). Ver src/services/amplify.js.
 
 # ============================================
 # ENUMS
