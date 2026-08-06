@@ -1,7 +1,12 @@
 import { validarChaveAcesso, nfFromChave } from './nfe'
 
-// Formatos usados em DANFE: chave de acesso em CODE-128 (etiquetas novas) ou ITF (DANFE classica)
-const NATIVE_FORMATS = ['code_128', 'itf']
+// Chave de acesso costuma vir em CODE-128 (etiquetas novas) ou ITF (DANFE
+// classica); os demais entram porque etiquetas de transportadora variam.
+const NATIVE_FORMATS = ['code_128', 'itf', 'code_39', 'codabar', 'ean_13']
+const ZXING_FORMATS = ['Code128', 'ITF', 'Code39', 'Codabar', 'EAN-13']
+
+// Frames grandes (4K) travam a decodificacao em celular: reduz antes de ler
+const LARGURA_MAX_ANALISE = 1600
 
 async function detectComBarcodeDetectorNativo(blob) {
   if (typeof window === 'undefined' || !('BarcodeDetector' in window)) return null
@@ -40,7 +45,7 @@ async function detectComZxing(blob) {
     })
 
     const resultados = await readBarcodes(blob, {
-      formats: ['Code128', 'ITF'],
+      formats: ZXING_FORMATS,
       tryHarder: true,
       maxNumberOfSymbols: 4
     })
@@ -144,13 +149,14 @@ export function iniciarLeituraContinua(videoEl, onDetect) {
       if (!ativo) return
       if (videoEl.readyState >= 2 && (!acumulado.chave || !acumulado.pedido)) {
         try {
-          canvas.width = videoEl.videoWidth
-          canvas.height = videoEl.videoHeight
-          ctx.drawImage(videoEl, 0, 0)
+          const escala = Math.min(1, LARGURA_MAX_ANALISE / (videoEl.videoWidth || 1))
+          canvas.width = Math.round(videoEl.videoWidth * escala)
+          canvas.height = Math.round(videoEl.videoHeight * escala)
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
           const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
           if (blob) {
             const resultados = await readBarcodes(blob, {
-              formats: ['Code128', 'ITF'],
+              formats: ZXING_FORMATS,
               tryHarder: true,
               maxNumberOfSymbols: 4
             })

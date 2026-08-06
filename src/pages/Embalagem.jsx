@@ -6,8 +6,9 @@ import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import { useConfiguracao, DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS } from '@/hooks/useConfiguracao'
-import { validarChaveAcesso, nfFromChave, serieFromChave, cnpjFromChave, normalizeNf, clientesSimilares, montarMarcadorChave, extrairChaveDeObservacao, limparMarcadores } from '@/lib/nfe'
+import { validarChaveAcesso, nfFromChave, serieFromChave, cnpjFromChave, normalizeNf, montarMarcadorChave, decidirDuplicidade } from '@/lib/nfe'
 import { decodeDanfeBarcodes } from '@/lib/barcode'
+import { verificarAtualizacao } from '@/lib/versao'
 import amplifyService from '@/services/amplify'
 
 export default function Embalagem() {
@@ -125,50 +126,48 @@ export default function Embalagem() {
         const embalagens = await amplifyService.filterEmbalagens({ nf_number: { eq: extractedNf } })
         if (ocrJobIdRef.current !== jobId) return
 
-        // O numero da NF so e unico por CNPJ+serie, e a empresa opera com mais
-        // de um de cada. Registros novos guardam a chave na observacao; quando
-        // as duas chaves existem, a comparacao e pelo documento completo.
-        const candidatos = (embalagens || []).filter(e => !e.is_duplicada)
-        let original = null
-        let mesmaChaveConfirmada = false
+        // Candidatos: registros nao-duplicados dos ultimos 30 dias
+        const candidatos = (embalagens || []).filter(e => {
+          if (e.is_duplicada) return false
+          const diffDias = (Date.now() - new Date(e.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+          return diffDias <= 30
+        })
 
-        if (chaveValida) {
-          const comMesmaChave = candidatos.find(c => extrairChaveDeObservacao(c.observacao) === chaveAcesso)
-          if (comMesmaChave) {
-            original = comMesmaChave
-            mesmaChaveConfirmada = true
-          } else {
-            // Candidatos com chave gravada divergente sao de outro CNPJ/serie:
-            // nao sao duplicata deste documento. Ficam so os sem chave (incerto).
-            original = candidatos.find(c => !extrairChaveDeObservacao(c.observacao)) || null
+        // Duplicata confirmada tem prioridade; 'confirmar' so prevalece se
+        // nenhum outro candidato for duplicata de fato.
+        let decisao = 'outro_documento'
+        let original = null
+        for (const candidato of candidatos) {
+          const resultado = decidirDuplicidade({
+            chaveAtual: chaveValida ? chaveAcesso : '',
+            clienteAtual: extractedCliente,
+            candidato
+          })
+          if (resultado === 'duplicata') {
+            decisao = 'duplicata'
+            original = candidato
+            break
           }
-        } else {
-          original = candidatos[0] || null
+          if (resultado === 'confirmar' && decisao !== 'duplicata') {
+            decisao = 'confirmar'
+            original = candidato
+          }
         }
 
-        const isRecente = original && (() => {
-          const diffDias = (Date.now() - new Date(original.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-          return diffDias <= 30
-        })()
+        if (original && decisao === 'confirmar') {
+          // Leitura incerta (sem chave ou sem cliente): o operador decide
+          setEmbalagemOriginal(original)
+          setInfoNfNova(chaveValida ? {
+            serie: serieFromChave(chaveAcesso),
+            cnpj: cnpjFromChave(chaveAcesso)
+          } : null)
+          setDuplicidadeSuspeita(true)
+          setShowModalDuplicidade(true)
+          setIsOcrRunning(false)
+          return
+        }
 
-        if (original && isRecente) {
-          // Mesma chave = mesmo documento, duplicata certa. Sem chave gravada
-          // no registro antigo, so registra automaticamente quando o cliente
-          // tambem confere; senao o operador decide.
-          const clienteConfere = clientesSimilares(extractedCliente, original.cliente_nome)
-
-          if (!mesmaChaveConfirmada && !clienteConfere) {
-            setEmbalagemOriginal(original)
-            setInfoNfNova(chaveValida ? {
-              serie: serieFromChave(chaveAcesso),
-              cnpj: cnpjFromChave(chaveAcesso)
-            } : null)
-            setDuplicidadeSuspeita(true)
-            setShowModalDuplicidade(true)
-            setIsOcrRunning(false)
-            return
-          }
-
+        if (original && decisao === 'duplicata') {
           setEmbalagemOriginal(original)
           setIsDuplicada(true)
           try {
@@ -345,6 +344,9 @@ export default function Embalagem() {
 
       triggerFeedback('Embalagem salva!')
       resetarEstado()
+      // Entre uma embalagem e outra e o unico momento seguro para recarregar
+      // no fluxo do operador, que nunca sai desta tela
+      verificarAtualizacao()
     } catch (error) {
       console.error('Erro ao finalizar embalagem:', error)
       alert('Erro ao salvar embalagem')

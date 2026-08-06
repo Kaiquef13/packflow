@@ -55,6 +55,31 @@ export function limparMarcadores(observacao) {
   return String(observacao || '').replace(MARCADOR_CHAVE_REGEX, '').replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim()
 }
 
+// Decide o que fazer quando existe registro recente com o mesmo numero de NF.
+// Retorna 'duplicata' (registrar automaticamente), 'outro_documento' (seguir
+// normalmente) ou 'confirmar' (perguntar ao operador).
+//
+// O numero da NF so e unico por CNPJ+serie e os dois CNPJs da empresa emitem
+// em faixas que se cruzam, entao numero igual sozinho nao prova duplicidade.
+export function decidirDuplicidade({ chaveAtual, clienteAtual, candidato }) {
+  const chaveCandidato = extrairChaveDeObservacao(candidato?.observacao)
+  const chaveValida = validarChaveAcesso(chaveAtual)
+
+  // Duas chaves conhecidas: comparacao exata do documento
+  if (chaveValida && chaveCandidato) {
+    return chaveCandidato === chaveAtual ? 'duplicata' : 'outro_documento'
+  }
+
+  if (clientesSimilares(clienteAtual, candidato?.cliente_nome)) return 'duplicata'
+
+  // Chave lida do codigo de barras garante o numero da NF: se o cliente e
+  // conhecido e diverge, e outro CNPJ/serie com o mesmo numero.
+  if (chaveValida && clienteAtual) return 'outro_documento'
+
+  // Leitura incerta (sem chave ou sem cliente): o operador decide
+  return 'confirmar'
+}
+
 export function normalizeNf(nf) {
   const digits = String(nf || '').replace(/\D/g, '')
   return digits.replace(/^0+/, '') || ''

@@ -3,6 +3,7 @@ import { Camera, SwitchCamera, ZoomIn, ZoomOut, Check, Loader2, ArrowLeft, ScanB
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
 import { iniciarLeituraContinua } from '@/lib/barcode'
+import { VERSAO_CURTA } from '@/lib/versao'
 
 const CAMERA_PREFERENCE_KEY = 'packflow_preferred_camera'
 
@@ -243,6 +244,7 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
               </Button>
             )}
             <span>Etapa {etapa}/3</span>
+            <span className="opacity-50 text-xs" title="Versão do app">v{VERSAO_CURTA}</span>
           </div>
         </div>
 
