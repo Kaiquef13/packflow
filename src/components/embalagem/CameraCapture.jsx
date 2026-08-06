@@ -7,7 +7,7 @@ import { VERSAO_CURTA } from '@/lib/versao'
 
 const CAMERA_PREFERENCE_KEY = 'packflow_preferred_camera'
 
-export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onBack, isProcessing = false }) {
+export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onBack, isProcessing = false, produtos = [] }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -21,16 +21,16 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
   const [capturedFile, setCapturedFile] = useState(null)
   const [error, setError] = useState(null)
   const [cameraReady, setCameraReady] = useState(false)
-  const [barcodeLido, setBarcodeLido] = useState(null)
-  const barcodeLidoRef = useRef(null)
+  const [candidatosLidos, setCandidatosLidos] = useState(null)
+  const candidatosRef = useRef(null)
 
-  // Leitura continua dos codigos de barras enquanto o operador mira (so na etapa da DANFE)
+  // Leitura continua do codigo do pedido enquanto o operador mira (etapa da DANFE)
   useEffect(() => {
     if (etapa !== 1 || capturedImage || !cameraReady || !videoRef.current) return
 
-    const parar = iniciarLeituraContinua(videoRef.current, (resultado) => {
-      barcodeLidoRef.current = resultado
-      setBarcodeLido(resultado)
+    const parar = iniciarLeituraContinua(videoRef.current, (candidatos) => {
+      candidatosRef.current = candidatos
+      setCandidatosLidos(candidatos)
       if (navigator.vibrate) navigator.vibrate(80)
     })
 
@@ -215,7 +215,7 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
 
   const confirmPhoto = () => {
     if (!capturedFile || !onCapture) return
-    onCapture(capturedFile, capturedImage, barcodeLidoRef.current)
+    onCapture(capturedFile, capturedImage, candidatosRef.current)
   }
 
   return (
@@ -305,24 +305,43 @@ export default function CameraCapture({ etapa, titulo, subtitulo, onCapture, onB
         {/* Indicador de leitura do codigo de barras (etapa DANFE) */}
         {etapa === 1 && !capturedImage && cameraReady && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
-            {barcodeLido?.nf ? (
+            {candidatosLidos?.length ? (
               <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-lg"
               >
                 <Check className="w-5 h-5" />
-                <span className="font-semibold">
-                  NF {barcodeLido.nf} lida
-                  {barcodeLido.pedido ? ` • Pedido ${barcodeLido.pedido}` : ''}
-                </span>
+                <span className="font-semibold">Pedido {candidatosLidos[0]} lido</span>
               </motion.div>
             ) : (
               <div className="flex items-center gap-2 bg-black/60 text-white px-4 py-2 rounded-full">
                 <ScanBarcode className="w-5 h-5 animate-pulse" />
-                <span className="text-sm">Aponte para o código de barras da DANFE</span>
+                <span className="text-sm">Aponte para o código de barras do pedido</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Itens do pedido: o operador confere o que deve entrar na caixa */}
+        {produtos.length > 0 && !capturedImage && cameraReady && (
+          <div className="absolute top-3 left-3 right-3 z-10 max-h-[38%] overflow-y-auto rounded-lg bg-black/70 backdrop-blur px-3 py-2 text-white">
+            <p className="text-xs uppercase tracking-wide opacity-70 mb-1">
+              {produtos.length} {produtos.length === 1 ? 'item do pedido' : 'itens do pedido'}
+            </p>
+            <ul className="space-y-1">
+              {produtos.map((produto, index) => (
+                <li key={`${produto.sku || 'item'}-${index}`} className="text-sm leading-snug flex gap-2">
+                  <span className="font-bold shrink-0">{produto.quantidade}x</span>
+                  <span>
+                    {produto.nome}
+                    {produto.localizacao && (
+                      <span className="opacity-70"> • {produto.localizacao}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

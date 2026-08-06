@@ -627,8 +627,9 @@ export async function extractDataFromFile({ key, skipForms = false, barcodeStatu
 
 // Consulta os dados do cliente pelo numero do pedido BaseLinker (lido do
 // codigo de barras da etiqueta). Sem OCR, sem custo de Textract.
-export async function consultarPedidoBaseLinker(orderId) {
-  if (!orderId) {
+export async function consultarPedidoBaseLinker(candidatos) {
+  const lista = (Array.isArray(candidatos) ? candidatos : [candidatos]).filter(Boolean);
+  if (lista.length === 0) {
     throw new Error('Pedido BaseLinker sem numero.');
   }
 
@@ -643,7 +644,7 @@ export async function consultarPedidoBaseLinker(orderId) {
       headers: { 'Content-Type': 'application/json' },
       body: {
         mode: 'baselinker_order',
-        order_id: orderId
+        candidatos: lista
       }
     }
   });

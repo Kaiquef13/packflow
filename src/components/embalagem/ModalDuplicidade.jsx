@@ -128,8 +128,12 @@ export default function ModalDuplicidade({
               </p>
               {infoNfNova && (
                 <p className="text-sm text-blue-900">
-                  <span className="font-semibold">Série:</span> {infoNfNova.serie}
-                  <span className="font-semibold ml-3">CNPJ emitente:</span> ...{String(infoNfNova.cnpj).slice(-6)}
+                  <span className="font-semibold">Pedido:</span> {infoNfNova.pedido}
+                  {infoNfNova.empresa && (
+                    <>
+                      <span className="font-semibold ml-3">Empresa:</span> {infoNfNova.empresa}
+                    </>
+                  )}
                 </p>
               )}
             </div>

@@ -6,8 +6,8 @@ import ModalDuplicidade from '@/components/embalagem/ModalDuplicidade'
 import { Button } from '@/components/ui/button'
 import { useUploadFile, useExtractData, useCreateEmbalagem, useUpdateEmbalagem } from '@/hooks/useEmbalagens'
 import { useConfiguracao, DEFAULT_TEMPO_MINIMO_SUSPEITA_SEGUNDOS } from '@/hooks/useConfiguracao'
-import { validarChaveAcesso, nfFromChave, serieFromChave, cnpjFromChave, normalizeNf, montarMarcadorChave, decidirDuplicidade } from '@/lib/nfe'
-import { decodeDanfeBarcodes } from '@/lib/barcode'
+import { validarChaveAcesso, nfFromChave, normalizeNf, montarMarcadorPedido, decidirDuplicidade } from '@/lib/nfe'
+import { lerCandidatosPedido } from '@/lib/barcode'
 import { verificarAtualizacao } from '@/lib/versao'
 import amplifyService from '@/services/amplify'
 
@@ -39,7 +39,10 @@ export default function Embalagem() {
   const [isRegistrandoDuplicidade, setIsRegistrandoDuplicidade] = useState(false)
   const [duplicidadeSuspeita, setDuplicidadeSuspeita] = useState(false)
   const [infoNfNova, setInfoNfNova] = useState(null)
-  const [chaveAcessoLida, setChaveAcessoLida] = useState('')
+  const [pedidoBaseLinker, setPedidoBaseLinker] = useState('')
+  const [produtosPedido, setProdutosPedido] = useState([])
+  const empresaEmitenteRef = useRef('')
+  const pedidoRef = useRef('')
   const ocrJobIdRef = useRef(0)
   const feedbackTimeoutRef = useRef(null)
 
@@ -67,60 +70,58 @@ export default function Embalagem() {
     }
   }, [])
 
-  const startOcrBackground = async (fileKey, barcode = null) => {
+  const startOcrBackground = async (fileKey, candidatosPedido = null) => {
     const jobId = Date.now()
     ocrJobIdRef.current = jobId
     setIsOcrRunning(true)
     setOcrError(null)
 
     try {
-      // Chave lida do codigo de barras e deterministica: NF sai validada dela e
-      // o Lambda pode pular o modo FORMS do Textract (o caro) com seguranca.
-      const nfDoBarcode = barcode?.nf || ''
       let extractedCliente = ''
+      let extractedNf = ''
+      let pedidoLido = ''
       let ocrResult = null
 
-      // Melhor caso: chave + pedido lidos do barcode -> dados do cliente vem
-      // do BaseLinker (fonte exata, custo zero) e o Textract nem e chamado.
-      if (nfDoBarcode && barcode?.pedido) {
+      // Caminho principal: o numero do pedido lido do codigo de barras traz
+      // NF, cliente e produtos direto do BaseLinker — exato e sem custo.
+      if (candidatosPedido?.length) {
         try {
-          const pedidoInfo = await amplifyService.consultarPedidoBaseLinker(barcode.pedido)
-          if (pedidoInfo?.cliente_nome) extractedCliente = pedidoInfo.cliente_nome
+          const info = await amplifyService.consultarPedidoBaseLinker(candidatosPedido)
+          if (ocrJobIdRef.current !== jobId) return
+          if (info?.order_id) {
+            pedidoLido = String(info.order_id)
+            extractedCliente = info.cliente_nome || ''
+            extractedNf = normalizeNf(info.nf_number || '')
+            setProdutosPedido(info.produtos || [])
+            empresaEmitenteRef.current = info.empresa || ''
+            pedidoRef.current = pedidoLido
+          }
         } catch (consultaErro) {
           console.warn('Consulta BaseLinker falhou, usando OCR como fallback:', consultaErro)
+          if (ocrJobIdRef.current !== jobId) return
         }
-        if (ocrJobIdRef.current !== jobId) return
       }
 
-      if (!extractedCliente) {
-        // Telemetria: registra nos logs do Lambda o que o barcode conseguiu ler
-        const barcodeStatus = barcode?.nf
-          ? (barcode?.pedido ? 'chave_e_pedido' : 'so_chave')
-          : (barcode?.pedido ? 'so_pedido' : 'nenhum')
-
+      // Fallback: etiqueta ilegivel ou pedido ausente na API
+      if (!extractedNf || !extractedCliente) {
         ocrResult = await extractData.mutateAsync({
           key: fileKey,
-          skipForms: Boolean(nfDoBarcode),
-          barcodeStatus
+          skipForms: Boolean(extractedNf),
+          barcodeStatus: pedidoLido ? 'pedido_ok' : (candidatosPedido?.length ? 'pedido_nao_encontrado' : 'sem_barcode')
         })
         if (ocrJobIdRef.current !== jobId) return
-        extractedCliente = ocrResult.cliente_nome || ''
-      }
-
-      // A chave de acesso (44 digitos, com digito verificador) e mais confiavel
-      // que o numero impresso: quando valida, o numero da NF derivado dela
-      // corrige erros de leitura de digito do OCR.
-      const chaveAcesso = barcode?.chave || ocrResult?.chave_acesso || ''
-      const chaveValida = Boolean(nfDoBarcode) || validarChaveAcesso(chaveAcesso)
-      let extractedNf = nfDoBarcode || normalizeNf(ocrResult?.nf_number || '')
-      if (!nfDoBarcode && chaveValida) {
-        const nfDaChave = nfFromChave(chaveAcesso)
-        if (nfDaChave) extractedNf = nfDaChave
+        if (!extractedCliente) extractedCliente = ocrResult.cliente_nome || ''
+        if (!extractedNf) {
+          const chaveOcr = ocrResult?.chave_acesso || ''
+          extractedNf = validarChaveAcesso(chaveOcr)
+            ? nfFromChave(chaveOcr)
+            : normalizeNf(ocrResult?.nf_number || '')
+        }
       }
 
       setNfNumber(extractedNf)
       setClienteNome(extractedCliente)
-      setChaveAcessoLida(chaveValida ? chaveAcesso : '')
+      setPedidoBaseLinker(pedidoLido)
 
       if (extractedNf) {
         const embalagens = await amplifyService.filterEmbalagens({ nf_number: { eq: extractedNf } })
@@ -139,7 +140,7 @@ export default function Embalagem() {
         let original = null
         for (const candidato of candidatos) {
           const resultado = decidirDuplicidade({
-            chaveAtual: chaveValida ? chaveAcesso : '',
+            pedidoAtual: pedidoLido,
             clienteAtual: extractedCliente,
             candidato
           })
@@ -157,10 +158,7 @@ export default function Embalagem() {
         if (original && decisao === 'confirmar') {
           // Leitura incerta (sem chave ou sem cliente): o operador decide
           setEmbalagemOriginal(original)
-          setInfoNfNova(chaveValida ? {
-            serie: serieFromChave(chaveAcesso),
-            cnpj: cnpjFromChave(chaveAcesso)
-          } : null)
+          setInfoNfNova(pedidoLido ? { pedido: pedidoLido, empresa: empresaEmitenteRef.current } : null)
           setDuplicidadeSuspeita(true)
           setShowModalDuplicidade(true)
           setIsOcrRunning(false)
@@ -176,7 +174,7 @@ export default function Embalagem() {
               nfNumberValue: extractedNf,
               clienteValue: extractedCliente,
               fileKey,
-              chaveValue: chaveValida ? chaveAcesso : ''
+              pedidoValue: pedidoLido
             })
             if (ocrJobIdRef.current !== jobId) return
             setDuplicidadeAutoResumo(resumo)
@@ -209,19 +207,18 @@ export default function Embalagem() {
     }
   }
 
-  const handleCaptureEtapa1 = async (file, preview, barcodeAoVivo = null) => {
+  const handleCaptureEtapa1 = async (file, preview, candidatosAoVivo = null) => {
     setIsProcessing(true)
 
     try {
-      // A leitura ao vivo (durante a mira) e a mais confiavel; a foto parada
-      // e o fallback para completar o que faltou (ex: pedido sem chave).
-      const precisaFotoParada = !barcodeAoVivo?.nf || !barcodeAoVivo?.pedido
-      const barcodePromise = precisaFotoParada
-        ? decodeDanfeBarcodes(file).catch((error) => {
+      // A leitura durante a mira ja costuma resolver; a foto parada so entra
+      // como reforco quando nada foi lido ao vivo.
+      const barcodePromise = candidatosAoVivo?.length
+        ? Promise.resolve([])
+        : lerCandidatosPedido(file).catch((error) => {
             console.warn('Leitura de codigo de barras da foto falhou:', error)
-            return null
+            return []
           })
-        : Promise.resolve(null)
 
       const { key: fileKey } = await uploadFile.mutateAsync(file)
       setFotoDanfeKey(fileKey)
@@ -231,13 +228,9 @@ export default function Embalagem() {
       }
       setEtapa(2)
 
-      const barcodeFoto = await barcodePromise
-      const barcode = {
-        chave: barcodeAoVivo?.chave || barcodeFoto?.chave || '',
-        nf: barcodeAoVivo?.nf || barcodeFoto?.nf || '',
-        pedido: barcodeAoVivo?.pedido || barcodeFoto?.pedido || ''
-      }
-      startOcrBackground(fileKey, barcode)
+      const candidatosFoto = await barcodePromise
+      const candidatos = [...new Set([...(candidatosAoVivo || []), ...(candidatosFoto || [])])]
+      startOcrBackground(fileKey, candidatos)
     } catch (error) {
       console.error('Erro na etapa 1:', error)
       alert('Erro ao processar foto da DANFE')
@@ -305,7 +298,7 @@ export default function Embalagem() {
 
       // Guarda a chave de acesso no registro (via marcador na observacao)
       // para futuras checagens de duplicidade compararem o documento completo
-      const observacaoComChave = [observacaoFinal, montarMarcadorChave(chaveAcessoLida)]
+      const observacaoComChave = [observacaoFinal, montarMarcadorPedido(pedidoBaseLinker)]
         .filter(Boolean)
         .join('\n')
 
@@ -382,7 +375,7 @@ export default function Embalagem() {
     setInfoNfNova(null)
   }
 
-  const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey, chaveValue = '' }) => {
+  const registrarDuplicidadeAutomatica = async ({ original, nfNumberValue, clienteValue, fileKey, pedidoValue = '' }) => {
     setIsRegistrandoDuplicidade(true)
     try {
       const now = new Date()
@@ -390,7 +383,7 @@ export default function Embalagem() {
       const cliente = clienteValue || clienteNome
       const observacaoDup = [
         `[DUPLICIDADE] Registro vinculado à NF original ${original?.nf_number || original?.id || ''}`,
-        montarMarcadorChave(chaveValue || chaveAcessoLida)
+        montarMarcadorPedido(pedidoValue || pedidoRef.current)
       ].filter(Boolean).join('\n')
 
       const data = {
@@ -450,7 +443,10 @@ export default function Embalagem() {
     setIsDuplicada(false)
     setDuplicidadeSuspeita(false)
     setInfoNfNova(null)
-    setChaveAcessoLida('')
+    setPedidoBaseLinker('')
+    setProdutosPedido([])
+    pedidoRef.current = ''
+    empresaEmitenteRef.current = ''
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -470,7 +466,10 @@ export default function Embalagem() {
     setIsDuplicada(false)
     setDuplicidadeSuspeita(false)
     setInfoNfNova(null)
-    setChaveAcessoLida('')
+    setPedidoBaseLinker('')
+    setProdutosPedido([])
+    pedidoRef.current = ''
+    empresaEmitenteRef.current = ''
     setIsProcessing(false)
     setIsOcrRunning(false)
     setOcrError(null)
@@ -574,6 +573,7 @@ export default function Embalagem() {
           onCapture={handleCaptureEtapa2}
           onBack={voltarParaEtapa1}
           isProcessing={isProcessing}
+          produtos={produtosPedido}
         />
       )}
 
@@ -585,6 +585,7 @@ export default function Embalagem() {
           onCapture={handleCaptureEtapa3}
           onBack={voltarParaEtapa2}
           isProcessing={isProcessing}
+          produtos={produtosPedido}
         />
       )}
 

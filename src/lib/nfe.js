@@ -40,6 +40,7 @@ export function cnpjFromChave(chave) {
 // a checagem de duplicidade compara o documento completo (CNPJ+serie+NF),
 // eliminando colisoes entre os CNPJs/series da empresa.
 const MARCADOR_CHAVE_REGEX = /\[CHAVE:(\d{44})\]/
+const MARCADOR_PEDIDO_REGEX = /\[PEDIDO:(\d+)\]/
 
 export function montarMarcadorChave(chave) {
   const digits = String(chave || '').replace(/\D/g, '')
@@ -51,8 +52,25 @@ export function extrairChaveDeObservacao(observacao) {
   return match ? match[1] : ''
 }
 
+// O numero do pedido BaseLinker e unico na conta, entao identifica o documento
+// sem a ambiguidade de CNPJ+serie+numero que o numero da NF sozinho tem.
+export function montarMarcadorPedido(pedido) {
+  const digits = String(pedido || '').replace(/\D/g, '')
+  return digits ? `[PEDIDO:${digits}]` : ''
+}
+
+export function extrairPedidoDeObservacao(observacao) {
+  const match = String(observacao || '').match(MARCADOR_PEDIDO_REGEX)
+  return match ? match[1] : ''
+}
+
 export function limparMarcadores(observacao) {
-  return String(observacao || '').replace(MARCADOR_CHAVE_REGEX, '').replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim()
+  return String(observacao || '')
+    .replace(MARCADOR_CHAVE_REGEX, '')
+    .replace(MARCADOR_PEDIDO_REGEX, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
 }
 
 // Decide o que fazer quando existe registro recente com o mesmo numero de NF.
@@ -61,9 +79,16 @@ export function limparMarcadores(observacao) {
 //
 // O numero da NF so e unico por CNPJ+serie e os dois CNPJs da empresa emitem
 // em faixas que se cruzam, entao numero igual sozinho nao prova duplicidade.
-export function decidirDuplicidade({ chaveAtual, clienteAtual, candidato }) {
+export function decidirDuplicidade({ chaveAtual, pedidoAtual, clienteAtual, candidato }) {
+  const pedidoCandidato = extrairPedidoDeObservacao(candidato?.observacao)
   const chaveCandidato = extrairChaveDeObservacao(candidato?.observacao)
   const chaveValida = validarChaveAcesso(chaveAtual)
+  const pedido = String(pedidoAtual || '').replace(/\D/g, '')
+
+  // Numero do pedido e a identidade mais forte: unico na conta BaseLinker
+  if (pedido && pedidoCandidato) {
+    return pedidoCandidato === pedido ? 'duplicata' : 'outro_documento'
+  }
 
   // Duas chaves conhecidas: comparacao exata do documento
   if (chaveValida && chaveCandidato) {
@@ -72,9 +97,9 @@ export function decidirDuplicidade({ chaveAtual, clienteAtual, candidato }) {
 
   if (clientesSimilares(clienteAtual, candidato?.cliente_nome)) return 'duplicata'
 
-  // Chave lida do codigo de barras garante o numero da NF: se o cliente e
-  // conhecido e diverge, e outro CNPJ/serie com o mesmo numero.
-  if (chaveValida && clienteAtual) return 'outro_documento'
+  // Dado confiavel (pedido da API ou chave do codigo de barras) garante o
+  // numero da NF: cliente conhecido que diverge significa outro CNPJ/serie.
+  if ((pedido || chaveValida) && clienteAtual) return 'outro_documento'
 
   // Leitura incerta (sem chave ou sem cliente): o operador decide
   return 'confirmar'

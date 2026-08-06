@@ -626,18 +626,9 @@ const emitOcrUsageLog = ({
   console.log(JSON.stringify(metricLog));
 };
 
-// Consulta o pedido no BaseLinker para obter os dados do cliente sem OCR.
-// O numero do pedido vem impresso (e em codigo de barras) na etiqueta DANFE.
-const consultarPedidoBaseLinker = async (orderId) => {
+const chamarBaseLinker = async (method, parameters) => {
   const token = process.env.BASELINKER_TOKEN;
-  if (!token) {
-    return { statusCode: 500, body: { message: 'BASELINKER_TOKEN nao configurado no Lambda.' } };
-  }
-
-  const params = new URLSearchParams({
-    method: 'getOrders',
-    parameters: JSON.stringify({ order_id: Number(orderId) })
-  });
+  if (!token) throw new Error('BASELINKER_TOKEN nao configurado no Lambda.');
 
   const response = await fetch('https://api.baselinker.com/connector.php', {
     method: 'POST',
@@ -645,34 +636,90 @@ const consultarPedidoBaseLinker = async (orderId) => {
       'X-BLToken': token,
       'Content-Type': 'application/x-www-form-urlencoded'
     },
-    body: params.toString()
+    body: new URLSearchParams({ method, parameters: JSON.stringify(parameters) }).toString()
   });
 
-  const data = await response.json();
+  return response.json();
+};
 
-  if (data.status !== 'SUCCESS') {
-    console.warn('BaseLinker retornou erro:', JSON.stringify(data));
-    return { statusCode: 502, body: { message: 'Erro na consulta BaseLinker', detalhe: data.error_message || data.status } };
-  }
+// A fatura traz o numero da NF em dois formatos: "42160/Multiloja" (empresa
+// emitente) e "42160/6" (numero/serie).
+const extrairDadosNota = (invoice) => {
+  if (!invoice) return {};
 
-  const order = Array.isArray(data.orders) ? data.orders[0] : null;
-  if (!order) {
-    return { statusCode: 404, body: { message: 'Pedido nao encontrado no BaseLinker', order_id: orderId } };
-  }
+  const externo = String(invoice.external_invoice_number || '');
+  const numero = String(invoice.number || '');
 
-  const clienteNome = order.invoice_fullname || order.delivery_fullname || order.delivery_company || order.invoice_company || '';
+  const [nfExterna, serieExterna] = externo.split('/');
+  const [nfNumero, empresa] = numero.split('/');
 
   return {
-    statusCode: 200,
-    body: {
-      order_id: order.order_id,
-      cliente_nome: clienteNome,
-      cliente_source: 'baselinker',
-      email: order.email || null,
-      delivery_fullname: order.delivery_fullname || null,
-      invoice_fullname: order.invoice_fullname || null
-    }
+    nf_number: (nfExterna || nfNumero || '').replace(/\D/g, '') || null,
+    serie: (serieExterna || '').replace(/\D/g, '') || null,
+    empresa: empresa || null,
+    series_id: invoice.series_id || null,
+    data_emissao: invoice.date_sell ? new Date(invoice.date_sell * 1000).toISOString() : null
   };
+};
+
+// Busca pedido + nota fiscal no BaseLinker a partir do numero do pedido
+// impresso na etiqueta. Substitui o OCR: os dados vem da fonte, sem custo.
+// Aceita varios candidatos porque a etiqueta traz outros codigos de barras
+// (transportadora) que podem ser lidos junto; retorna o primeiro que existir.
+const consultarPedidoBaseLinker = async (candidatos) => {
+  const lista = (Array.isArray(candidatos) ? candidatos : [candidatos])
+    .map((c) => String(c || '').replace(/\D/g, ''))
+    .filter(Boolean);
+
+  if (lista.length === 0) {
+    return { statusCode: 400, body: { message: 'Nenhum numero de pedido informado.' } };
+  }
+
+  for (const orderId of lista) {
+    let data;
+    try {
+      data = await chamarBaseLinker('getOrders', { order_id: Number(orderId) });
+    } catch (error) {
+      return { statusCode: 500, body: { message: error.message } };
+    }
+
+    if (data.status !== 'SUCCESS') {
+      console.warn('BaseLinker getOrders erro:', JSON.stringify(data).slice(0, 200));
+      continue;
+    }
+
+    const order = Array.isArray(data.orders) ? data.orders[0] : null;
+    if (!order) continue;
+
+    // A fatura e opcional: pedido sem NF emitida ainda assim traz cliente e itens
+    let dadosNota = {};
+    try {
+      const invoices = await chamarBaseLinker('getInvoices', { order_id: Number(orderId) });
+      if (invoices.status === 'SUCCESS') {
+        dadosNota = extrairDadosNota((invoices.invoices || [])[0]);
+      }
+    } catch (error) {
+      console.warn('BaseLinker getInvoices falhou:', error.message);
+    }
+
+    return {
+      statusCode: 200,
+      body: {
+        order_id: order.order_id,
+        cliente_nome: order.invoice_fullname || order.delivery_fullname || order.delivery_company || order.invoice_company || '',
+        cliente_source: 'baselinker',
+        ...dadosNota,
+        produtos: (order.products || []).map((p) => ({
+          nome: p.name,
+          sku: p.sku || null,
+          quantidade: Number(p.quantity) || 1,
+          localizacao: p.location || null
+        }))
+      }
+    };
+  }
+
+  return { statusCode: 404, body: { message: 'Pedido nao encontrado no BaseLinker', tentados: lista } };
 };
 
 exports.handler = async (event) => {
@@ -680,15 +727,18 @@ exports.handler = async (event) => {
     const payload = normalizeEvent(event);
 
     if (payload.mode === 'baselinker_order') {
-      if (!payload.order_id) {
+      const candidatos = payload.candidatos || payload.order_id;
+      if (!candidatos) {
         return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ message: 'order_id obrigatorio para consulta BaseLinker.' }) };
       }
-      const resultado = await consultarPedidoBaseLinker(payload.order_id);
+      const resultado = await consultarPedidoBaseLinker(candidatos);
       console.log(JSON.stringify({
         baselinker_lookup: true,
-        order_id: payload.order_id,
+        candidatos,
         status: resultado.statusCode,
-        encontrou_cliente: Boolean(resultado.body?.cliente_nome)
+        encontrou_cliente: Boolean(resultado.body?.cliente_nome),
+        encontrou_nf: Boolean(resultado.body?.nf_number),
+        qtd_produtos: (resultado.body?.produtos || []).length
       }));
       return { statusCode: resultado.statusCode, headers: corsHeaders, body: JSON.stringify(resultado.body) };
     }

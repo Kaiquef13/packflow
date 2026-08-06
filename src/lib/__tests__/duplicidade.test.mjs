@@ -1,93 +1,88 @@
-import { decidirDuplicidade, montarMarcadorChave, nfFromChave, cnpjFromChave } from '../nfe.js'
+import { decidirDuplicidade, montarMarcadorPedido, montarMarcadorChave, limparMarcadores, extrairPedidoDeObservacao } from '../nfe.js'
+import { ordenarCandidatos } from '../barcode.js'
 
-// Chaves reais das etiquetas enviadas pelo usuario
-const CHAVE_42160_MULTI = '35260851449654000138550060000421601945604105' // NF 42160, Multi Loja, 05/08
-const CHAVE_42155_MULTI = '35260851449654000138550060000421551162352998' // NF 42155, Multi Loja, 05/08
-const CHAVE_43594_ORQUI = '35260845007571000196550060000435941165652649' // NF 43594, Orquiflora, 05/08
+// Pedidos e NFs reais das etiquetas usadas para validar o fluxo
+const PEDIDO_42160 = '44887644' // NF 42160, Multiloja
+const PEDIDO_43594 = '44923246' // NF 43594, Boutique (Orquiflora)
+const CODIGO_TRANSPORTADORA = '47661235671'
 
 let falhas = 0
 const check = (nome, obtido, esperado) => {
-  const ok = obtido === esperado
+  const ok = JSON.stringify(obtido) === JSON.stringify(esperado)
   if (!ok) falhas++
-  console.log(`${ok ? 'OK  ' : 'FALHA'} ${nome}: ${obtido}${ok ? '' : ` (esperado ${esperado})`}`)
+  console.log(`${ok ? 'OK  ' : 'FALHA'} ${nome}: ${JSON.stringify(obtido)}${ok ? '' : ` (esperado ${JSON.stringify(esperado)})`}`)
 }
 
-console.log('--- Casos reais que geraram falso positivo em producao ---')
-// NF 42160: registro antigo de 29/07 (Orquiflora, sem chave gravada, cliente EDVANIA)
-check('42160 Multi vs registro antigo EDVANIA',
+console.log('--- Identidade pelo numero do pedido (unico na conta) ---')
+check('mesmo pedido = duplicata',
   decidirDuplicidade({
-    chaveAtual: CHAVE_42160_MULTI,
-    clienteAtual: 'DEBORA ORTIZ BARBOSA',
+    pedidoAtual: PEDIDO_42160,
+    clienteAtual: 'Debora Ortiz Barbosa',
+    candidato: { cliente_nome: 'Debora Ortiz Barbosa', observacao: montarMarcadorPedido(PEDIDO_42160) }
+  }), 'duplicata')
+
+check('pedido diferente = outro documento (mesmo com NF igual)',
+  decidirDuplicidade({
+    pedidoAtual: PEDIDO_42160,
+    clienteAtual: 'Debora Ortiz Barbosa',
+    candidato: { cliente_nome: 'EDVANIA PASTORA MOURA SILVA', observacao: montarMarcadorPedido(PEDIDO_43594) }
+  }), 'outro_documento')
+
+console.log('\n--- Colisao real entre os dois CNPJs (registro antigo sem marcador) ---')
+check('NF 42160 Multi vs registro antigo da Orquiflora',
+  decidirDuplicidade({
+    pedidoAtual: PEDIDO_42160,
+    clienteAtual: 'Debora Ortiz Barbosa',
     candidato: { cliente_nome: 'EDVANIA PASTORA MOURA SILVA', observacao: '[ALERTA: Tempo suspeito - 52s]' }
   }), 'outro_documento')
 
-check('42155 Multi vs registro antigo Marli',
+check('registro antigo sem marcador, mesmo cliente = duplicata',
   decidirDuplicidade({
-    chaveAtual: CHAVE_42155_MULTI,
-    clienteAtual: 'LAUDINELA DE JESUS SILVA',
-    candidato: { cliente_nome: 'Marli Braz Pinto', observacao: '[ALERTA: Tempo suspeito - 40s]' }
-  }), 'outro_documento')
-
-console.log('\n--- Duplicata verdadeira deve continuar sendo detectada ---')
-check('mesma chave gravada',
-  decidirDuplicidade({
-    chaveAtual: CHAVE_42160_MULTI,
-    clienteAtual: 'DEBORA ORTIZ BARBOSA',
-    candidato: { cliente_nome: 'DEBORA ORTIZ BARBOSA', observacao: montarMarcadorChave(CHAVE_42160_MULTI) }
+    pedidoAtual: PEDIDO_42160,
+    clienteAtual: 'Debora Ortiz Barbosa',
+    candidato: { cliente_nome: 'DEBORA ORTIZ BARBOSA', observacao: '' }
   }), 'duplicata')
 
-check('registro antigo sem chave, mesmo cliente',
+console.log('\n--- Leitura incerta pergunta ao operador ---')
+check('sem pedido e cliente diferente',
   decidirDuplicidade({
-    chaveAtual: CHAVE_42160_MULTI,
-    clienteAtual: 'DEBORA ORTIZ BARBOSA',
-    candidato: { cliente_nome: 'Debora Ortiz Barbosa', observacao: '' }
-  }), 'duplicata')
-
-check('mesmo cliente com erro de OCR (PAIVA/PALVA)',
-  decidirDuplicidade({
-    chaveAtual: '',
-    clienteAtual: 'MARIA PALVA SANTOS',
-    candidato: { cliente_nome: 'MARIA PAIVA SANTOS', observacao: '' }
-  }), 'duplicata')
-
-console.log('\n--- Chaves diferentes = CNPJs diferentes ---')
-check('chave gravada de outro CNPJ',
-  decidirDuplicidade({
-    chaveAtual: CHAVE_42160_MULTI,
-    clienteAtual: 'DEBORA ORTIZ BARBOSA',
-    candidato: { cliente_nome: 'RITA MARIA', observacao: montarMarcadorChave(CHAVE_43594_ORQUI) }
-  }), 'outro_documento')
-
-console.log('\n--- Leitura incerta deve perguntar ao operador ---')
-check('sem chave e cliente diferente',
-  decidirDuplicidade({
-    chaveAtual: '',
-    clienteAtual: 'DEBORA ORTIZ BARBOSA',
+    pedidoAtual: '',
+    clienteAtual: 'Debora Ortiz Barbosa',
     candidato: { cliente_nome: 'EDVANIA PASTORA', observacao: '' }
   }), 'confirmar')
 
-check('chave valida mas cliente nao lido',
+check('pedido lido mas cliente desconhecido',
   decidirDuplicidade({
-    chaveAtual: CHAVE_42160_MULTI,
+    pedidoAtual: PEDIDO_42160,
     clienteAtual: '',
     candidato: { cliente_nome: 'EDVANIA PASTORA', observacao: '' }
   }), 'confirmar')
 
-// Mesma chave da NF 42160 com o digito verificador trocado (5 -> 6)
-const CHAVE_DV_ERRADO = CHAVE_42160_MULTI.slice(0, 43) + '6'
-check('chave com DV errado e mesmo rejeitada',
-  (await import('../nfe.js')).validarChaveAcesso(CHAVE_DV_ERRADO), false)
-
-check('chave invalida (leitura corrompida) trata como sem chave',
+console.log('\n--- Compatibilidade com registros gravados com chave de acesso ---')
+const CHAVE_42160 = '35260851449654000138550060000421601945604105'
+check('mesma chave ainda e reconhecida',
   decidirDuplicidade({
-    chaveAtual: CHAVE_DV_ERRADO,
-    clienteAtual: 'DEBORA ORTIZ BARBOSA',
-    candidato: { cliente_nome: 'EDVANIA PASTORA', observacao: '' }
-  }), 'confirmar')
+    chaveAtual: CHAVE_42160,
+    clienteAtual: 'Debora Ortiz Barbosa',
+    candidato: { cliente_nome: 'Debora Ortiz Barbosa', observacao: montarMarcadorChave(CHAVE_42160) }
+  }), 'duplicata')
 
-console.log('\n--- Sanidade das chaves reais ---')
-console.log('NF 42160 ->', nfFromChave(CHAVE_42160_MULTI), '| CNPJ', cnpjFromChave(CHAVE_42160_MULTI))
-console.log('NF 43594 ->', nfFromChave(CHAVE_43594_ORQUI), '| CNPJ', cnpjFromChave(CHAVE_43594_ORQUI))
+console.log('\n--- Selecao do codigo do pedido entre os barcodes da etiqueta ---')
+check('descarta codigo longo da transportadora',
+  ordenarCandidatos([CODIGO_TRANSPORTADORA, PEDIDO_42160])[0], PEDIDO_42160)
+
+check('ignora codigo de 16 digitos da etiqueta de envio',
+  ordenarCandidatos(['2000015509732230', PEDIDO_43594]), [PEDIDO_43594])
+
+check('remove duplicados lidos em frames diferentes',
+  ordenarCandidatos([PEDIDO_42160, PEDIDO_42160]), [PEDIDO_42160])
+
+console.log('\n--- Marcadores nao vazam para a tela ---')
+check('observacao limpa',
+  limparMarcadores(`Cliente pediu cuidado\n${montarMarcadorPedido(PEDIDO_42160)}`), 'Cliente pediu cuidado')
+
+check('pedido recuperado da observacao',
+  extrairPedidoDeObservacao(montarMarcadorPedido(PEDIDO_42160)), PEDIDO_42160)
 
 console.log(falhas === 0 ? '\nTODOS OS TESTES PASSARAM' : `\n${falhas} FALHA(S)`)
 process.exit(falhas === 0 ? 0 : 1)
